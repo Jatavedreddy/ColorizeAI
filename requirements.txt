@@ -1,0 +1,8 @@
+torch
+torchvision
+numpy
+scikit-image
+gradio
+Pillow
+opencv-python
+moviepy
