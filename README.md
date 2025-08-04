@@ -17,7 +17,7 @@ This repository contains PyTorch implementations of image colorization models.
 ### Installation
 1. Clone the repository:
    ```
-   git clone https://github.com/richzhang/colorization.git
+   git clone https://github.com/Jatavedreddy/ColorizeAI.git
    ```
 2. Install the required packages:
    ```
