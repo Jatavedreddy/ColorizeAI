@@ -93,7 +93,7 @@ ColorizeAI/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/ColorizeAI.git
+   git clone https://github.com/Jatavedreddy/ColorizeAI.git
    cd ColorizeAI
    ```
 
@@ -223,7 +223,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For questions, issues, or contributions:
-- **GitHub Issues**: [Report bugs or request features](https://github.com/yourusername/ColorizeAI/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/Jatavedreddy/ColorizeAI/issues)
 - **Documentation**: Check the `docs/` folder for detailed guides
 - **Email**: your.email@example.com
 
