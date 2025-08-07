@@ -201,17 +201,6 @@ When ground-truth images are provided, the system computes:
 - **Memory**: 4GB+ RAM, 8GB+ for large videos
 - **Storage**: ~2GB for models and cache
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
@@ -220,13 +209,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Gradio for the excellent UI framework
 - All contributors to the open-source libraries used
 
-## 📞 Support
-
-For questions, issues, or contributions:
-- **GitHub Issues**: [Report bugs or request features](https://github.com/Jatavedreddy/ColorizeAI/issues)
-- **Documentation**: Check the `docs/` folder for detailed guides
-- **Email**: your.email@example.com
-
----
 
 **⭐ Star this repository if you find it useful!**
