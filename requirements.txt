@@ -6,3 +6,5 @@ gradio
 Pillow
 opencv-python
 moviepy
+scikit-learn
+scipy
