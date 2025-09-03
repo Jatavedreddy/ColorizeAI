@@ -38,7 +38,6 @@ A comprehensive AI-powered colorization system that transforms black and white i
    - Artistic filters integration
 
 ### **⚡ Performance Features**
-- **Smart Caching**: Instant reprocessing of same content
 - **Batch Processing**: Handle multiple images with progress tracking
 - **Video Optimization**: Frame skipping, resolution control, fast mode
 - **Memory Management**: Efficient processing of large files
@@ -71,7 +70,6 @@ ColorizeAI/
 │   │   └── __init__.py
 │   └── utils/                # Utility functions
 │       ├── __init__.py
-│       ├── cache.py          # Cache management
 │       └── metrics.py        # Quality metrics
 ├── tests/                    # Test files
 │   └── test_video_feature.py
@@ -82,8 +80,8 @@ ColorizeAI/
 ├── assets/                   # Sample assets
 │   ├── sample_images/
 │   └── sample_videos/
-├── cache/                    # Cache storage
-│   └── videos/
+├── outputs/                  # Generated outputs
+│   └── videos/               # Processed video files
 └── flagged/                  # Gradio flagged content
 ```
 
@@ -151,7 +149,7 @@ pip install -e ".[dev]"
    - **Temporal Consistency**: Enhanced feature for flicker-free results
    - **Style**: Apply cinematic color grading
 4. Click "Process Video"
-5. **Note**: Videos are automatically cached for instant reprocessing!
+5. **Note**: Each video is processed fresh (no caching layer).
 
 ## 🔧 Advanced Features
 
@@ -173,7 +171,7 @@ Add precise color guidance using JSON format:
 - Use **Fast Mode** for videos longer than 30 seconds
 - **Frame Skip 5+** recommended for long videos
 - **720p resolution** offers best speed/quality balance
-- Videos are **cached automatically** - reprocessing is instant!
+- Videos are processed freshly each run (no caching layer)
 - Large images (>1024px) are auto-resized in batch mode for speed
 
 ## 📊 Quality Metrics
@@ -199,7 +197,7 @@ When ground-truth images are provided, the system computes:
 - **Python**: 3.8+
 - **GPU**: CUDA-compatible GPU recommended (CPU supported)
 - **Memory**: 4GB+ RAM, 8GB+ for large videos
-- **Storage**: ~2GB for models and cache
+- **Storage**: ~2GB for models
 
 
 ## 🙏 Acknowledgments

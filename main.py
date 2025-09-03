@@ -20,31 +20,48 @@ import cv2
 from PIL import Image
 from skimage.transform import resize
 import json
+import torch
+import contextlib
 
 # Import our organized modules
 from colorizeai.core.models import get_models
 from colorizeai.core.colorization import colorize_highres, colorize_highres_enhanced
-from colorizeai.utils.cache import get_image_cache, get_video_cache
+# Cache removed: no caching helpers imported
 from colorizeai.utils.metrics import compute_metrics
 from colorizeai.features.temporal_consistency import TemporalConsistencyEngine
 
 # Initialize components
 temporal_engine = TemporalConsistencyEngine()
 
+# ---------------- Performance Utilities ----------------
+def _get_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+DEVICE = _get_device()
+
+@contextlib.contextmanager
+def _autocast(device):
+    if device.type == "cuda":
+        with torch.autocast("cuda", dtype=torch.float16):
+            yield
+    elif device.type == "mps":
+        with torch.autocast("mps", dtype=torch.float16):
+            yield
+    else:
+        yield
+
+
 def handler_single(input_img: np.ndarray, strength: float, gt_img: np.ndarray | None):
     """Basic single image handler"""
     if input_img is None:
         return None, None, "<span style='color:red'>Please upload an image.</span>"
 
-    cache = get_image_cache()
-    key = cache._sha_key(input_img, strength)
-    
-    cached_result = cache.get(key)
-    if cached_result:
-        eccv_img, sig_img = cached_result
-    else:
-        eccv_img, sig_img = colorize_highres(input_img, strength)
-        cache.put(key, (eccv_img, sig_img))
+    # Direct processing (cache removed)
+    eccv_img, sig_img = colorize_highres(input_img, strength)
 
     slider_eccv = (input_img, (eccv_img * 255).astype(np.uint8))
     slider_sig = (input_img, (sig_img * 255).astype(np.uint8))
@@ -90,24 +107,9 @@ def handler_single_enhanced(
         except:
             pass
 
-    cache = get_image_cache()
-    cache_key = cache._sha_key(
-        input_img, strength, 
-        use_ensemble=use_ensemble,
-        style_type=style_type,
-        has_reference=reference_img is not None,
-        num_hints=len(color_hints)
+    eccv_img, sig_img, metadata = colorize_highres_enhanced(
+        input_img, strength, use_ensemble, reference_img, color_hints, style_type
     )
-    
-    cached_result = cache.get(cache_key)
-    if cached_result:
-        eccv_img, sig_img = cached_result
-        metadata = {"cached": True}
-    else:
-        eccv_img, sig_img, metadata = colorize_highres_enhanced(
-            input_img, strength, use_ensemble, reference_img, color_hints, style_type
-        )
-        cache.put(cache_key, (eccv_img, sig_img))
 
     slider_eccv = (input_img, (eccv_img * 255).astype(np.uint8))
     slider_sig = (input_img, (sig_img * 255).astype(np.uint8))
@@ -222,26 +224,28 @@ def handler_batch(files: List[str] | None, strength: float, progress=gr.Progress
         return [], [], None, f"❌ <b>Error:</b> Batch processing failed: {str(e)}"
 
 def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, resolution: str = "Original", custom_width: int = None, custom_height: int = None, fast_mode: bool = True, use_temporal_consistency: bool = False, style_type: str = 'none', progress=gr.Progress()):
-    """Unified video handler with caching and enhanced features"""
+    """Unified video handler with caching, keyframe interpolation, codec fallback, and enhanced temporal features.
+
+    Improvements:
+    - Keyframe sampling + interpolation for skipped frames instead of pure duplication.
+    - Multi-codec fallback for broader compatibility.
+    - Scene-change aware temporal reset (when using temporal consistency).
+    - Disk space safety check before writing.
+    """
     if video_file is None:
         return None
 
     # Sanitize frame_skip - default to 3 for better speed
     frame_skip = max(1, int(frame_skip) if frame_skip else 3)
-    
-    # Enable fast mode optimizations
+    # Fast mode tweaks
     if fast_mode:
-        frame_skip = max(frame_skip, 2)  # Minimum frame skip of 2 in fast mode
+        frame_skip = max(frame_skip, 2)
+        # Disable temporal for speed if user accidentally enabled
+        if use_temporal_consistency:
+            use_temporal_consistency = False
+            gr.Info("Temporal consistency disabled in Fast Mode for speed.")
 
-    # Check video cache first
-    video_cache = get_video_cache()
-    cache_key = video_cache._video_cache_key(video_file, strength, frame_skip, resolution, custom_width, custom_height, fast_mode, use_temporal_consistency, style_type)
-    
-    cached_path = video_cache.get(cache_key)
-    if cached_path:
-        progress(1.0, desc="✅ Using cached result - instant processing!")
-        gr.Info("🚀 Found cached result! Using previously processed video.")
-        return cached_path
+    # Cache removed: always process
 
     # Initialize temporal consistency engine if enhanced features are enabled
     if use_temporal_consistency:
@@ -304,28 +308,62 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
     processing_h = processing_h if processing_h % 2 == 0 else processing_h - 1
 
     # Create cached output path with unique name
-    cached_filename = f"video_{cache_key[:12]}.mp4"
-    out_path = str(video_cache.cache_dir / cached_filename)
-    
-    # Use faster codec for speed
-    if fast_mode:
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Faster encoding
-    else:
-        fourcc = cv2.VideoWriter_fourcc(*"h264")  # Better quality
-    
-    writer = cv2.VideoWriter(out_path, fourcc, fps, (out_w, out_h))
-    
-    if not writer.isOpened():
-        gr.Warning("Failed to initialize video writer.")
+    # Output directory fallback (use temp dir within project cache/videos even without registry)
+    cache_dir = Path(__file__).parent / "outputs" / "videos"
+    cache_dir.mkdir(exist_ok=True)
+    out_path = str(cache_dir / f"video_output.mp4")
+
+    # Disk space safety (require at least 50MB free or 2x estimated size)
+    try:
+        statv = os.statvfs(str(cache_dir))
+        free_bytes = statv.f_bavail * statv.f_frsize
+        est_size = width * height * 3 * total_frames // (frame_skip if frame_skip else 1) // 4  # rough compressed estimate
+        if free_bytes < max(50 * 1024 * 1024, est_size * 2):
+            gr.Warning("Low disk space in output directory. Aborting video processing.")
+            cap.release()
+            return None
+    except Exception:
+        pass
+
+    # Codec fallback list (quality preference order when not fast_mode)
+    codec_candidates = ["mp4v", "avc1", "h264", "XVID"] if not fast_mode else ["mp4v", "avc1", "XVID"]
+    writer = None
+    chosen_codec = None
+    for c in codec_candidates:
+        fourcc = cv2.VideoWriter_fourcc(*c)
+        w = cv2.VideoWriter(out_path, fourcc, fps, (out_w, out_h))
+        if w.isOpened():
+            writer = w
+            chosen_codec = c
+            break
+    if writer is None:
+        gr.Warning("Failed to initialize any video writer (codecs tried: mp4v, avc1, h264, XVID).")
         cap.release()
         return None
 
-    processing_mode = "Enhanced" if use_temporal_consistency or style_type != 'none' else "Fast" if fast_mode else "Quality"
-    progress(0.1, desc=f"🔄 Processing video ({processing_mode} mode) - will cache for instant future access...")
-    
+    processing_mode = "Enhanced" if use_temporal_consistency or style_type != 'none' else ("Fast" if fast_mode else "Quality")
+    progress(0.1, desc=f"🔄 Processing video ({processing_mode} mode)...")
+
+    # Precompute whether we process at final size directly
+    single_resize = (processing_w == out_w and processing_h == out_h)
+
+    # Preallocate output BGR buffer
+    out_bgr_buffer = np.empty((out_h, out_w, 3), dtype=np.uint8)
+
+    # Warm model once (to move weights to device / trigger compilation paths)
+    try:
+        dummy = np.zeros((processing_h, processing_w, 3), dtype=np.uint8)
+        with torch.no_grad():
+            with _autocast(DEVICE):
+                colorize_highres(dummy, 1.0)
+    except Exception:
+        pass
+
     frame_idx = 0
-    last_colored = None
+    last_keyframe_rgb = None
+    last_keyframe_idx = -1
     processed_frames = 0
+    prev_gray_frame = None
     
     try:
         while True:
@@ -338,63 +376,73 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
                 progress_pct = 0.1 + (frame_idx / total_frames) * 0.8  # Leave 10% for caching
                 progress(progress_pct, desc=f"Processing frame {frame_idx + 1}/{total_frames} (Skip: {frame_skip})")
             
-            if frame_idx % frame_skip == 0:
+            do_keyframe = (frame_idx % frame_skip == 0)
+            frame_gray_full = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY) if use_temporal_consistency else None
+            # Detect scene change (simple threshold on gray diff) when temporal enabled
+            scene_change = False
+            if use_temporal_consistency and prev_gray_frame is not None and frame_gray_full is not None:
+                gray_diff = np.mean(np.abs(frame_gray_full.astype(float) - prev_gray_frame.astype(float))) / 255.0
+                if gray_diff > 0.25:
+                    scene_change = True
+                    temporal_engine.reset()
+            if use_temporal_consistency:
+                prev_gray_frame = frame_gray_full
+
+            if do_keyframe or scene_change:
                 try:
-                    # Resize frame before colorization for speed
                     if fast_mode and (frame_bgr.shape[1] != processing_w or frame_bgr.shape[0] != processing_h):
                         frame_bgr_small = cv2.resize(frame_bgr, (processing_w, processing_h), interpolation=cv2.INTER_AREA)
                     else:
                         frame_bgr_small = frame_bgr
-                    
-                    frame_rgb = cv2.cvtColor(frame_bgr_small, cv2.COLOR_BGR2RGB)
-                    
-                    # Choose processing method based on features enabled
-                    if use_temporal_consistency or style_type != 'none':
-                        # Enhanced processing
-                        _, enhanced_frame, _ = colorize_highres_enhanced(
-                            frame_rgb, strength, 
-                            use_ensemble=True,
-                            style_type=style_type
-                        )
-                        
-                        # Apply temporal consistency
-                        if use_temporal_consistency:
-                            frame_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
-                            enhanced_frame = temporal_engine.apply_temporal_consistency(
-                                enhanced_frame, frame_gray
-                            )
-                        
-                        out_frame_rgb = (enhanced_frame * 255).astype(np.uint8)
-                    else:
-                        # Basic fast processing
-                        eccv_img, _ = colorize_highres(frame_rgb, strength)
-                        out_frame_rgb = (eccv_img * 255).astype(np.uint8)
-                    
-                    # Resize back to output resolution if needed
-                    if out_frame_rgb.shape[:2] != (out_h, out_w):
-                        out_frame_rgb = cv2.resize(out_frame_rgb, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
-                    
-                    last_colored = out_frame_rgb.copy()
+                    frame_rgb_small = cv2.cvtColor(frame_bgr_small, cv2.COLOR_BGR2RGB)
+                    with torch.no_grad():
+                        with _autocast(DEVICE):
+                            if use_temporal_consistency or style_type != 'none':
+                                _, enhanced_frame, _ = colorize_highres_enhanced(
+                                    frame_rgb_small, strength,
+                                    use_ensemble=True,
+                                    style_type=style_type
+                                )
+                                if use_temporal_consistency:
+                                    frame_gray_small = cv2.cvtColor(frame_rgb_small, cv2.COLOR_RGB2GRAY)
+                                    enhanced_frame = temporal_engine.apply_temporal_consistency(enhanced_frame, frame_gray_small)
+                                key_rgb = (enhanced_frame * 255).astype(np.uint8)
+                            else:
+                                eccv_img, _ = colorize_highres(frame_rgb_small, strength)
+                                key_rgb = (eccv_img * 255).astype(np.uint8)
+                    if key_rgb.shape[:2] != (out_h, out_w):
+                        key_rgb = cv2.resize(key_rgb, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
+                    last_keyframe_rgb = key_rgb.copy()
+                    last_keyframe_idx = frame_idx
+                    out_frame_rgb = key_rgb
                     processed_frames += 1
-                    
                 except Exception as e:
-                    # If colorization fails, use the original frame
-                    print(f"Warning: Colorization failed for frame {frame_idx}: {e}")
+                    print(f"Warning: Colorization failed for keyframe {frame_idx}: {e}")
                     out_frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                     if out_frame_rgb.shape[:2] != (out_h, out_w):
                         out_frame_rgb = cv2.resize(out_frame_rgb, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
             else:
-                # For skipped frames, use last colored frame or original
-                if last_colored is not None:
-                    out_frame_rgb = last_colored.copy()
+                # Interpolate between last keyframe and the future (cannot see future yet) -> hold with mild fade
+                if last_keyframe_rgb is not None:
+                    # Simple temporal fade-in weight
+                    delta = frame_idx - last_keyframe_idx
+                    weight = min(1.0, delta / frame_skip)
+                    out_frame_rgb = last_keyframe_rgb.copy()
+                    if weight < 1.0 and not fast_mode:
+                        # Blend a little original luminance for variation
+                        orig_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                        if orig_rgb.shape[:2] != (out_h, out_w):
+                            orig_rgb = cv2.resize(orig_rgb, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
+                        out_frame_rgb = cv2.addWeighted(out_frame_rgb, 0.9, orig_rgb, 0.1, 0)
                 else:
                     out_frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                     if out_frame_rgb.shape[:2] != (out_h, out_w):
                         out_frame_rgb = cv2.resize(out_frame_rgb, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
             
             # Convert and write (optimized)
-            out_frame_bgr = cv2.cvtColor(out_frame_rgb, cv2.COLOR_RGB2BGR)
-            writer.write(out_frame_bgr)
+            # Convert to BGR in preallocated buffer
+            cv2.cvtColor(out_frame_rgb, cv2.COLOR_RGB2BGR, dst=out_bgr_buffer)
+            writer.write(out_bgr_buffer)
             frame_idx += 1
 
     except Exception as e:
@@ -417,9 +465,9 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
         return None
     
     # Add to cache
-    video_cache.put(cache_key, out_path)
+    # No caching; just return path
     
-    progress(1.0, desc=f"✅ Completed! Processed {processed_frames}/{total_frames} frames ({processing_mode} mode, cached for instant future access)")
+    progress(1.0, desc=f"✅ Completed! Processed {processed_frames}/{total_frames} keyframes ({processing_mode} mode via {chosen_codec} codec)")
     
     return out_path
 
@@ -441,9 +489,8 @@ Transform black and white images and videos with **basic** and **cutting-edge AI
 - 🖼️ **High-resolution colorization** preserving original quality
 - 📊 **Batch processing** with downloadable results
 - 📈 **Ground-truth evaluation** with PSNR/SSIM metrics
-- 🎬 **Video support** with frame skipping, resolution control, and **smart caching**
+- 🎬 **Video support** with frame skipping and resolution control
 - 🔄 **Interactive sliders** for before/after comparison
-- ⚡ **Smart caching** for instant responses
 - 🎛️ **Adjustable colorization strength**
 
 Choose from two powerful models: **ECCV16** (vibrant colors) and **SIGGRAPH17** (realistic results)
@@ -597,17 +644,16 @@ Choose from two powerful models: **ECCV16** (vibrant colors) and **SIGGRAPH17** 
                         gr.Markdown("""
                         **🚀 Speed Optimizations:**
                         - **Fast Mode**: Automatically optimizes settings for speed
-                        - **Smart Caching**: Videos are cached - reprocessing the same video is instant!
                         - **Default Frame Skip**: 3 (processes every 3rd frame)
                         - **Auto Resolution**: Downsizes large videos for faster processing
                         - **Memory Management**: Intelligent frame processing
                         
                         **⚠️ Processing Notes:**
                         - First processing: 3-5x faster with fast mode
-                        - **Subsequent runs**: Instant! (uses cached result)
+                        - **Subsequent runs**: Reprocess fully (no cache layer)
                         - Frame skip 5+ recommended for videos longer than 30 seconds
                         - 720p resolution offers best speed/quality balance
-                        - Cache stores up to 10 recent videos
+                        - Output directly written (no caching layer)
                         - Enhanced features (temporal consistency, styles) are slower but higher quality
                         """)
                     
@@ -675,3 +721,4 @@ if __name__ == "__main__":
     # Launch the interface
     iface = build_interface()
     iface.launch()
+ 

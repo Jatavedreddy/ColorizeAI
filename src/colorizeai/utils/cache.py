@@ -122,27 +122,73 @@ class VideoCacheManager:
                         resolution: str, custom_width: int, custom_height: int, 
                         fast_mode: bool, use_temporal_consistency: bool = False, 
                         style_type: str = 'none') -> str:
-        """Generate cache key for video processing parameters"""
-        h = hashlib.sha256()
-        
-        # Add file content hash (first 1MB for speed)
+        """Generate robust cache key for video processing.
+
+        Improvements over previous version:
+        - Multi-region sampling (start, middle, end) instead of only first 1MB.
+        - Includes file size and modification time for quick invalidation.
+        - Falls back gracefully if file operations fail.
+        - Normalizes optional custom dimensions (None -> 0) for stable hashing.
+        - Separates file fingerprint hash from parameters hash then combines.
+        """
+        file_hasher = hashlib.sha256()
+        param_hasher = hashlib.sha256()
+
+        # --- File fingerprint -------------------------------------------------
         try:
+            file_size = os.path.getsize(video_path)
+            mtime = int(os.path.getmtime(video_path))
+            # Encode basic metadata first (size + mtime)
+            file_hasher.update(f"{file_size}:{mtime}".encode())
+
+            # Open once and sample regions
             with open(video_path, 'rb') as f:
-                content = f.read(1024 * 1024)  # Read first 1MB
-                h.update(content)
+                # Sample up to 3 regions: start, middle, end
+                regions = []
+                sample_size = 256 * 1024  # 256KB per region (tunable)
+                if file_size <= sample_size * 3:
+                    # Small file: read entirely
+                    regions.append(f.read())
+                else:
+                    # Start
+                    regions.append(f.read(sample_size))
+                    # Middle
+                    mid_pos = max(sample_size, (file_size // 2) - (sample_size // 2))
+                    f.seek(mid_pos)
+                    regions.append(f.read(sample_size))
+                    # End
+                    end_pos = max(0, file_size - sample_size)
+                    f.seek(end_pos)
+                    regions.append(f.read(sample_size))
+                for chunk in regions:
+                    file_hasher.update(chunk)
         except Exception:
-            # Fallback to file path and size
-            h.update(video_path.encode())
-            try:
-                h.update(str(os.path.getsize(video_path)).encode())
-            except Exception:
-                pass
+            # Fallback: path string (still deterministic but weaker)
+            file_hasher.update(video_path.encode())
         
-        # Add processing parameters
-        params = f"{strength}_{frame_skip}_{resolution}_{custom_width}_{custom_height}_{fast_mode}_{use_temporal_consistency}_{style_type}"
-        h.update(params.encode())
-        
-        return h.hexdigest()
+        # --- Parameter fingerprint -------------------------------------------
+        # Normalize None dimensions to 0 for deterministic representation
+        cw = custom_width if custom_width is not None else 0
+        ch = custom_height if custom_height is not None else 0
+        # Round strength to avoid floating noise differences
+        norm_strength = round(float(strength), 5)
+        param_tuple = (
+            norm_strength,
+            int(frame_skip),
+            str(resolution),
+            int(cw),
+            int(ch),
+            int(bool(fast_mode)),
+            int(bool(use_temporal_consistency)),
+            str(style_type or 'none')
+        )
+        param_hasher.update(json.dumps(param_tuple, separators=(',', ':')).encode())
+
+        # Combine both hashes to produce final key
+        combined = hashlib.sha256()
+        combined.update(file_hasher.hexdigest().encode())
+        combined.update(param_hasher.hexdigest().encode())
+        return combined.hexdigest()
     
     def get(self, key: str) -> str | None:
         """Get cached video path if it exists"""
