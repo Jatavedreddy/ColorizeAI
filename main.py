@@ -224,13 +224,14 @@ def handler_batch(files: List[str] | None, strength: float, progress=gr.Progress
         return [], [], None, f"❌ <b>Error:</b> Batch processing failed: {str(e)}"
 
 def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, resolution: str = "Original", custom_width: int = None, custom_height: int = None, fast_mode: bool = True, use_temporal_consistency: bool = False, style_type: str = 'none', progress=gr.Progress()):
-    """Unified video handler with caching, keyframe interpolation, codec fallback, and enhanced temporal features.
+    """Video processing pipeline with keyframe interpolation, optional temporal consistency & styles, and codec fallback.
 
-    Improvements:
-    - Keyframe sampling + interpolation for skipped frames instead of pure duplication.
+    Features:
+    - Keyframe sampling + lightweight interpolation instead of naive duplication.
     - Multi-codec fallback for broader compatibility.
-    - Scene-change aware temporal reset (when using temporal consistency).
-    - Disk space safety check before writing.
+    - Scene-change detection resets temporal state to avoid ghosting.
+    - Disk space safety check before writing output.
+    - Fast Mode auto-adjusts frame skipping + internal resolution for speed.
     """
     if video_file is None:
         return None
@@ -251,7 +252,7 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
     if use_temporal_consistency:
         temporal_engine.reset()
 
-    progress(0, desc="🎬 Starting video processing (will be cached for future use)...")
+    progress(0, desc="🎬 Starting video processing...")
 
     cap = cv2.VideoCapture(video_file)
     if not cap.isOpened():
@@ -373,7 +374,7 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
             
             # Update progress less frequently for speed
             if frame_idx % 60 == 0:  # Update every 60 frames instead of 30
-                progress_pct = 0.1 + (frame_idx / total_frames) * 0.8  # Leave 10% for caching
+                progress_pct = 0.1 + (frame_idx / total_frames) * 0.8
                 progress(progress_pct, desc=f"Processing frame {frame_idx + 1}/{total_frames} (Skip: {frame_skip})")
             
             do_keyframe = (frame_idx % frame_skip == 0)
@@ -457,45 +458,48 @@ def handler_video(video_file: str | None, strength: float, frame_skip: int = 1, 
         cap.release()
         writer.release()
 
-    progress(0.95, desc="💾 Caching result for future use...")
+    progress(0.95, desc="� Finalizing video file...")
     
     # Check if output file was created successfully
     if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
         gr.Warning("Failed to create output video file.")
         return None
     
-    # Add to cache
-    # No caching; just return path
+    # Direct return (no caching layer)
     
-    progress(1.0, desc=f"✅ Completed! Processed {processed_frames}/{total_frames} keyframes ({processing_mode} mode via {chosen_codec} codec)")
+    progress(1.0, desc=f"✅ Done! Processed {processed_frames}/{total_frames} keyframes ({processing_mode} • {chosen_codec})")
     
     return out_path
 
 def build_interface():
     with gr.Blocks(theme=gr.themes.Soft(), title="🎨 ColorizeAI - Complete Image & Video Colorization Suite") as demo:
+    
         gr.Markdown(
-            """# 🎨 ColorizeAI - Complete Image & Video Colorization Suite
+            """# 🎨 ColorizeAI
 
-Transform black and white images and videos with **basic** and **cutting-edge AI** featuring **5 unique innovations**!
+    High‑quality AI colorization for images & video – fast defaults, deep controls when you need them.
 
-**🚀 Breakthrough Features:**
-- 🧠 **Smart Model Fusion**: Intelligently combines ECCV16 + SIGGRAPH17 based on image analysis
-- 🎯 **Reference-Guided Colorization**: Use example images to guide color choices  
-- 🖌️ **Interactive Color Hints**: Draw color hints directly on images
-- 🎬 **Temporal Consistency**: Flicker-free video colorization
-- 🎨 **Cinematic Style Transfer**: Apply film looks and artistic styles
+    **✨ Core Innovations**
+    - 🧠 Smart Model Fusion (ECCV16 + SIGGRAPH17, region‑aware)
+    - 🎯 Reference‑Guided Colorization (palette + tone transfer)
+    - 🖌️ Interactive Color Hints (sparse RGB points)
+    - ⏳ Temporal Consistency (optional flicker reduction)
+    - � Cinematic / Artistic Style Presets
 
-**⚡ Classic Features:**
-- 🖼️ **High-resolution colorization** preserving original quality
-- 📊 **Batch processing** with downloadable results
-- 📈 **Ground-truth evaluation** with PSNR/SSIM metrics
-- 🎬 **Video support** with frame skipping and resolution control
-- 🔄 **Interactive sliders** for before/after comparison
-- 🎛️ **Adjustable colorization strength**
+    **🧩 Toolkit**
+    - � PSNR / SSIM evaluation (with ground truth)
+    - � Batch processing (ZIP export)
+    - 🎬 Video frame skipping + resolution control
+    - �️ High‑res support (adaptive downscale in Fast Mode)
+    - 🔍 Before / After sliders
+    - �️ Strength blending control
 
-Choose from two powerful models: **ECCV16** (vibrant colors) and **SIGGRAPH17** (realistic results)
-"""
-        )
+    **⚡ Performance Philosophy**
+    Fast Mode = frame skip + internal downscale. Enhanced Mode enables fusion, styles, temporal smoothing. No caching layer → every run is fresh and reproducible.
+
+    Models included: ECCV16 (vibrant) + SIGGRAPH17 (natural). Fusion picks the best of both automatically.
+    """
+    )
 
         with gr.Tabs():
             # ----- Basic Single Image -----
@@ -642,19 +646,18 @@ Choose from two powerful models: **ECCV16** (vibrant colors) and **SIGGRAPH17** 
                         run_vid = gr.Button("🎬 Process Video", variant="primary", size="lg")
                         
                         gr.Markdown("""
-                        **🚀 Speed Optimizations:**
-                        - **Fast Mode**: Automatically optimizes settings for speed
-                        - **Default Frame Skip**: 3 (processes every 3rd frame)
-                        - **Auto Resolution**: Downsizes large videos for faster processing
-                        - **Memory Management**: Intelligent frame processing
-                        
-                        **⚠️ Processing Notes:**
-                        - First processing: 3-5x faster with fast mode
-                        - **Subsequent runs**: Reprocess fully (no cache layer)
-                        - Frame skip 5+ recommended for videos longer than 30 seconds
-                        - 720p resolution offers best speed/quality balance
-                        - Output directly written (no caching layer)
-                        - Enhanced features (temporal consistency, styles) are slower but higher quality
+                        **🚀 Speed Guide**
+                        - Fast Mode: Frame skip + internal downscale for big speedups
+                        - Default Skip = 3; raise to 5–8 for long clips
+                        - 720p is the best balance; 480p for drafts; Original only for short finals
+                        - Temporal Consistency & Styles add overhead → enable for final render
+                        - Output written directly (no caching layer)
+
+                        **🧪 Tips**
+                        - Prototype fast, then refine with lower skip
+                        - Temporal helps most on stable scenes
+                        - Subtle styles preserve detail; extreme styles trade texture for mood
+                        - Lower strength can give a more photographic result
                         """)
                     
                     with gr.Column(scale=1):
@@ -673,44 +676,25 @@ Choose from two powerful models: **ECCV16** (vibrant colors) and **SIGGRAPH17** 
                     outputs=vid_out,
                 )
         
-        # Enhanced Footer
-        gr.Markdown("""
-        ---
-        ## 🧠 What Makes This Unique?
+    # Enhanced Footer
+    gr.Markdown("""
+    ---
+    ### 🧠 Feature Deep Dive & Workflow
 
-        **1. Smart Model Fusion** 🤖
-        - Analyzes image characteristics (texture, contrast, edges)
-        - Automatically weights ECCV16 vs SIGGRAPH17 models
-        - Spatially-varying fusion for optimal results
+    **Fusion** – Region‑aware blend of ECCV16 (vibrant) + SIGGRAPH17 (natural).
+    **Reference** – Extracts palette & tone; best with similar lighting.
+    **Hints** – Sparse, high‑confidence RGB points propagate better than many.
+    **Temporal** – Optical flow chroma stabilization (use for finals to cut flicker).
+    **Styles** – Film & creative looks; apply subtly to retain texture.
 
-        **2. Reference-Guided Colorization** 🎯  
-        - Upload a reference image to guide color choices
-        - Extracts color palette and applies intelligently
-        - Perfect for matching specific color schemes
+    **Suggested Flow**
+    1. Draft: Fast Mode (skip=3, 720p)
+    2. Refine: Adjust strength, add hints or reference
+    3. Stylize: Add style preset (optional)
+    4. Final: Lower skip, enable temporal if needed
 
-        **3. Interactive Color Hints** 🖌️
-        - Add color hints by specifying x,y coordinates and RGB values
-        - Smart propagation based on image structure  
-        - Fine-tune specific regions
-
-        **4. Temporal Consistency** ⏳
-        - Optical flow tracking between frames
-        - Reduces flickering in videos
-        - Maintains color coherence across time
-
-        **5. Cinematic Style Transfer** 🎭
-        - Film emulation (Kodak, Fuji, Agfa)
-        - Color grading presets
-        - Artistic filters integration
-
-        **💡 Usage Tips:**
-        - **Basic Mode**: Fast processing for quick results
-        - **Enhanced Mode**: Try reference images for specific color themes
-        - Use color hints JSON format: `[{"x":100,"y":50,"r":255,"g":0,"b":0}]`
-        - Enable temporal consistency for smooth videos (slower but better quality)
-        - Videos are automatically cached for instant reprocessing
-        - Experiment with different style presets
-        """)
+    Transparent processing (no caching layer) → reproducible results every run.
+    """)
 
     return demo
 
