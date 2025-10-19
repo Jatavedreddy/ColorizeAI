@@ -31,7 +31,7 @@ echo "✓ Python: $(conda run -n colorize python --version)"
 echo ""
 
 # Check if DDColor weights exist
-WEIGHTS_PATH="../ddcolor/DDColor-master copy/modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"
+WEIGHTS_PATH="DDColor/modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"
 if [ -f "$WEIGHTS_PATH" ]; then
     SIZE=$(du -h "$WEIGHTS_PATH" | cut -f1)
     echo "✓ DDColor weights found (${SIZE})"

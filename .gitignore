@@ -3,6 +3,20 @@ leftpoint.txt
 *.tmp
 *.bak
 
+# Documentation and personal notes
+docs/
+*.md.backup
+*_notes.txt
+TODO.txt
+NOTES.txt
+UI_FIX_GUIDE.md
+CLEANUP_SUMMARY.md
+
+# Personal configuration
+.env.local
+secrets.json
+config.local.json
+
 # Cache directories
 cache/
 *.cache/
@@ -185,3 +199,20 @@ flagged/
 *.temp
 temp/
 tmp/
+
+# Personal workspace files
+.azure/
+outputs/
+test_*.py
+demo_*.py
+experiment_*.py
+main.py
+
+# Large output files
+*.mp4
+*.avi
+*.mov
+outputs/**/*.jpg
+outputs/**/*.png
+results/
+

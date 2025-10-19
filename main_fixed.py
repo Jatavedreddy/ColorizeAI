@@ -10,6 +10,11 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
+# Add DDColor to Python path
+ddcolor_path = Path(__file__).parent / "DDColor"
+if ddcolor_path.exists():
+    sys.path.insert(0, str(ddcolor_path))
+
 import gradio as gr
 import numpy as np
 from PIL import Image
@@ -37,7 +42,7 @@ def safe_convert_to_numpy(img):
         return np.array(Image.open(img).convert("RGB"))
     return None
 
-def handler_basic(input_img, strength, gt_img=None):
+def handler_basic(input_img, strength, use_ddcolor, gt_img=None):
     """Basic colorization handler"""
     try:
         # Convert inputs
@@ -48,9 +53,10 @@ def handler_basic(input_img, strength, gt_img=None):
         gt_img = safe_convert_to_numpy(gt_img)
         
         print(f"Processing image: {input_img.shape}")
+        print(f"Using DDColor: {use_ddcolor}")
         
         # Colorize
-        eccv_img, primary_img = colorize_highres(input_img, strength, use_ddcolor=True)
+        eccv_img, primary_img = colorize_highres(input_img, strength, use_ddcolor=use_ddcolor)
         
         # Convert to uint8 for display
         eccv_uint8 = (eccv_img * 255).astype(np.uint8)
@@ -68,22 +74,24 @@ def handler_basic(input_img, strength, gt_img=None):
             psnr_eccv, ssim_eccv = compute_metrics(gt_float, eccv_img)
             psnr_primary, ssim_primary = compute_metrics(gt_float, primary_img)
             
-            model_name = "DDColor" if is_ddcolor_available() else "SIGGRAPH17"
+            model_name = "DDColor" if (use_ddcolor and is_ddcolor_available()) else "SIGGRAPH17"
             metrics = f"""
+            <div style='background:#1f2937; padding:15px; border-radius:8px;'>
             <table style='width:100%; border-collapse: collapse;'>
-            <tr><th style='border:1px solid #ddd; padding:8px;'>Model</th>
-                <th style='border:1px solid #ddd; padding:8px;'>PSNR</th>
-                <th style='border:1px solid #ddd; padding:8px;'>SSIM</th></tr>
-            <tr><td style='border:1px solid #ddd; padding:8px;'>ECCV16</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{psnr_eccv:.2f}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{ssim_eccv:.3f}</td></tr>
-            <tr><td style='border:1px solid #ddd; padding:8px;'>{model_name}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{psnr_primary:.2f}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{ssim_primary:.3f}</td></tr>
+            <tr style='background:#374151;'><th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>Model</th>
+                <th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>PSNR</th>
+                <th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>SSIM</th></tr>
+            <tr><td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>ECCV16</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{psnr_eccv:.2f} dB</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{ssim_eccv:.3f}</td></tr>
+            <tr><td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{model_name}</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{psnr_primary:.2f} dB</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{ssim_primary:.3f}</td></tr>
             </table>
+            </div>
             """
         else:
-            metrics = "<p>ℹ️ <b>No ground truth provided</b> - metrics not computed.</p>"
+            metrics = "<div style='padding:15px; background:#dbeafe; border-radius:8px; color:#1e3a8a;'><p>ℹ️ <b>No ground truth provided</b> - metrics not computed.</p></div>"
         
         return slider_eccv, slider_primary, metrics
         
@@ -94,7 +102,7 @@ def handler_basic(input_img, strength, gt_img=None):
         traceback.print_exc()
         return None, None, error_msg
 
-def handler_enhanced(input_img, strength, gt_img, use_ensemble, reference_img, style_type, color_hints_json):
+def handler_enhanced(input_img, strength, use_ddcolor, gt_img, use_ensemble, reference_img, style_type, color_hints_json):
     """Enhanced colorization handler"""
     try:
         # Convert inputs
@@ -114,10 +122,11 @@ def handler_enhanced(input_img, strength, gt_img, use_ensemble, reference_img, s
                 pass
         
         print(f"Enhanced processing: ensemble={use_ensemble}, style={style_type}, hints={len(color_hints)}")
+        print(f"Using DDColor: {use_ddcolor}")
         
         # Colorize with features
         eccv_img, enhanced_img, metadata = colorize_highres_enhanced(
-            input_img, strength, use_ensemble, reference_img, color_hints, style_type, use_ddcolor=True
+            input_img, strength, use_ensemble, reference_img, color_hints, style_type, use_ddcolor=use_ddcolor
         )
         
         # Convert to uint8
@@ -138,26 +147,28 @@ def handler_enhanced(input_img, strength, gt_img, use_ensemble, reference_img, s
             
             model_name = "DDColor Enhanced" if metadata.get('ddcolor_used', False) else "SIGGRAPH17 Enhanced"
             metrics = f"""
+            <div style='background:#1f2937; padding:15px; border-radius:8px;'>
             <table style='width:100%; border-collapse: collapse;'>
-            <tr><th style='border:1px solid #ddd; padding:8px;'>Model</th>
-                <th style='border:1px solid #ddd; padding:8px;'>PSNR</th>
-                <th style='border:1px solid #ddd; padding:8px;'>SSIM</th></tr>
-            <tr><td style='border:1px solid #ddd; padding:8px;'>ECCV16</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{psnr_eccv:.2f}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{ssim_eccv:.3f}</td></tr>
-            <tr><td style='border:1px solid #ddd; padding:8px;'>{model_name}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{psnr_enhanced:.2f}</td>
-                <td style='border:1px solid #ddd; padding:8px;'>{ssim_enhanced:.3f}</td></tr>
+            <tr style='background:#374151;'><th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>Model</th>
+                <th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>PSNR</th>
+                <th style='border:1px solid #4b5563; padding:10px; color:#f3f4f6;'>SSIM</th></tr>
+            <tr><td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>ECCV16</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{psnr_eccv:.2f} dB</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{ssim_eccv:.3f}</td></tr>
+            <tr><td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{model_name}</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{psnr_enhanced:.2f} dB</td>
+                <td style='border:1px solid #4b5563; padding:10px; color:#e5e7eb;'>{ssim_enhanced:.3f}</td></tr>
             </table>
+            </div>
             """
         else:
-            metrics = "<p>ℹ️ <b>No ground truth provided</b> - metrics not computed.</p>"
+            metrics = "<div style='padding:15px; background:#dbeafe; border-radius:8px; color:#1e3a8a;'><p>ℹ️ <b>No ground truth provided</b> - metrics not computed.</p></div>"
         
         # Metadata display
         metadata_info = f"""
-        <div style='padding:10px; border:1px solid #ddd; border-radius:5px; background:#f9f9f9;'>
-        <h4>Processing Information:</h4>
-        <ul>
+        <div style='padding:15px; border:2px solid #3b82f6; border-radius:8px; background:#1e3a8a; color:#e0f2fe;'>
+        <h4 style='color:#93c5fd; margin-top:0;'>⚙️ Processing Information:</h4>
+        <ul style='color:#dbeafe;'>
         <li><b>Base Model:</b> {'DDColor' if metadata.get('ddcolor_used', False) else 'SIGGRAPH17'}</li>
         <li><b>Features Applied:</b> {', '.join(metadata.get('features_applied', ['none']))}</li>
         {f"<li><b>Style:</b> {metadata.get('style_applied', 'none')}</li>" if metadata.get('style_applied') else ""}
@@ -184,7 +195,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
     # Status
     dd_status = "🟢 DDColor Active" if is_ddcolor_available() else "🔴 DDColor Inactive"
     gr.HTML(f"""
-    <div style='padding:10px; background:#f0f0f0; border-radius:5px; margin-bottom:20px;'>
+    <div style='padding:15px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius:8px; margin-bottom:20px; color:white; font-size:16px;'>
     <b>Status:</b> {dd_status} | <b>Device:</b> CPU
     </div>
     """)
@@ -199,6 +210,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                     inp_img = gr.Image(label="📤 Upload Grayscale Image", type="numpy")
                     gt_img = gr.Image(label="🎯 Ground Truth (optional)", type="numpy")
                     strength = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Strength")
+                    use_ddcolor_basic = gr.Checkbox(label="🟢 Use DDColor (vs SIGGRAPH17)", value=True)
                     run_basic = gr.Button("🚀 Colorize", variant="primary", size="lg")
             
             with gr.Row():
@@ -209,7 +221,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
             
             run_basic.click(
                 fn=handler_basic,
-                inputs=[inp_img, strength, gt_img],
+                inputs=[inp_img, strength, use_ddcolor_basic, gt_img],
                 outputs=[slider_eccv, slider_sig, metrics]
             )
         
@@ -224,6 +236,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                     ref_img = gr.Image(label="🌈 Reference Image (optional)", type="numpy")
                     
                     strength_enh = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Strength")
+                    use_ddcolor_enh = gr.Checkbox(label="🟢 Use DDColor (vs SIGGRAPH17)", value=True)
                     use_ensemble = gr.Checkbox(value=True, label="🧠 Smart Model Fusion")
                     
                     style_type = gr.Dropdown(
@@ -251,7 +264,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
             
             run_enhanced.click(
                 fn=handler_enhanced,
-                inputs=[inp_img_enh, strength_enh, gt_img_enh, use_ensemble, ref_img, style_type, color_hints_json],
+                inputs=[inp_img_enh, strength_enh, use_ddcolor_enh, gt_img_enh, use_ensemble, ref_img, style_type, color_hints_json],
                 outputs=[slider_eccv_enh, slider_enh, metrics_enh, metadata_html]
             )
     
@@ -263,14 +276,16 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                 with gr.Column():
                     files_input = gr.Files(label="📁 Upload Multiple Images", file_count="multiple")
                     strength_batch = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Strength")
+                    use_ddcolor_batch = gr.Checkbox(label="🟢 Use DDColor (vs SIGGRAPH17)", value=True)
                     run_batch = gr.Button("⚡ Process Batch", variant="primary", size="lg")
                     
                     gr.Markdown("""
                     **📋 Guide:**
                     1. Upload multiple grayscale images (JPG, PNG, etc.)
                     2. Adjust colorization strength
-                    3. Click Process Batch and wait
-                    4. Download ZIP with results
+                    3. Toggle DDColor on/off
+                    4. Click Process Batch and wait
+                    5. Download ZIP with results
                     
                     *Images > 1024px are auto-resized for speed*
                     """)
@@ -283,7 +298,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
             
             zip_out = gr.File(label="📥 Download Results (ZIP)")
             
-            def handler_batch(files, strength, progress=gr.Progress()):
+            def handler_batch(files, strength, use_ddcolor, progress=gr.Progress()):
                 """Batch processing handler"""
                 if not files:
                     return [], [], None, "❌ No files uploaded"
@@ -294,6 +309,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                 from pathlib import Path
                 
                 progress(0, desc="Starting batch processing...")
+                print(f"Batch processing with DDColor: {use_ddcolor}")
                 
                 eccv_gallery, sig_gallery = [], []
                 processed = 0
@@ -319,7 +335,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                                     img_np = cv2.resize(img_np, (new_w, new_h))
                                 
                                 # Colorize
-                                eccv_img, sig_img = colorize_highres(img_np, strength, use_ddcolor=True)
+                                eccv_img, sig_img = colorize_highres(img_np, strength, use_ddcolor=use_ddcolor)
                                 
                                 eccv_uint8 = (eccv_img * 255).astype(np.uint8)
                                 sig_uint8 = (sig_img * 255).astype(np.uint8)
@@ -357,7 +373,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
             
             run_batch.click(
                 fn=handler_batch,
-                inputs=[files_input, strength_batch],
+                inputs=[files_input, strength_batch, use_ddcolor_batch],
                 outputs=[gallery_eccv, gallery_sig, zip_out, batch_status]
             )
         
@@ -369,6 +385,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                 with gr.Column():
                     vid_input = gr.File(label="🎥 Upload Video", file_types=[".mp4", ".avi", ".mov"])
                     strength_vid = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Strength")
+                    use_ddcolor_vid = gr.Checkbox(label="🟢 Use DDColor (vs SIGGRAPH17)", value=True)
                     
                     fast_mode = gr.Checkbox(value=True, label="⚡ Fast Mode (Recommended)")
                     
@@ -399,7 +416,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                 with gr.Column():
                     vid_out = gr.Video(label="🎥 Colorized Video")
             
-            def handler_video(video_file, strength, frame_skip, resolution, fast_mode, use_temporal, style_vid, progress=gr.Progress()):
+            def handler_video(video_file, strength, use_ddcolor, frame_skip, resolution, fast_mode, use_temporal, style_vid, progress=gr.Progress()):
                 """Video processing handler"""
                 if video_file is None:
                     return None
@@ -408,6 +425,7 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                 from colorizeai.features.temporal_consistency import TemporalConsistencyEngine
                 
                 progress(0, desc="🎬 Starting video processing...")
+                print(f"Video processing with DDColor: {use_ddcolor}")
                 
                 # Initialize temporal engine if needed
                 temporal_engine = None
@@ -476,13 +494,13 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
                                         frame_rgb, strength,
                                         use_ensemble=True,
                                         style_type=style_vid,
-                                        use_ddcolor=True
+                                        use_ddcolor=use_ddcolor
                                     )
                                     if use_temporal and temporal_engine:
                                         gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
                                         colored = temporal_engine.apply_temporal_consistency(colored, gray)
                                 else:
-                                    _, colored = colorize_highres(frame_rgb, strength, use_ddcolor=True)
+                                    _, colored = colorize_highres(frame_rgb, strength, use_ddcolor=use_ddcolor)
                                 
                                 colored_uint8 = (colored * 255).astype(np.uint8)
                                 last_colored_frame = colored_uint8
@@ -515,8 +533,221 @@ with gr.Blocks(title="🎨 ColorizeAI", theme=gr.themes.Soft()) as demo:
             
             run_vid.click(
                 fn=handler_video,
-                inputs=[vid_input, strength_vid, frame_skip, resolution, fast_mode, use_temporal, style_vid],
+                inputs=[vid_input, strength_vid, use_ddcolor_vid, frame_skip, resolution, fast_mode, use_temporal, style_vid],
                 outputs=vid_out
+            )
+        
+        # Performance Evaluation Tab
+        with gr.Tab("📊 Performance Evaluation"):
+            gr.Markdown("""
+            ### Compare Colorization Methods with Quantitative Metrics
+            Upload a grayscale image and ground truth to evaluate all available methods.
+            """)
+            
+            with gr.Row():
+                with gr.Column():
+                    eval_input = gr.Image(label="📤 Grayscale Input Image", type="numpy")
+                    eval_gt = gr.Image(label="🎯 Ground Truth (Color Reference)", type="numpy")
+                    eval_strength = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Strength")
+                    
+                    gr.Markdown("""
+                    **Methods Evaluated:**
+                    - ECCV16 (Zhang et al., 2016)
+                    - SIGGRAPH17 (Zhang et al., 2017)
+                    - DDColor (Kang et al., 2022)
+                    - DDColor + Smart Fusion
+                    - DDColor + Style Transfer (Modern)
+                    - DDColor + Style Transfer (Vintage)
+                    """)
+                    
+                    eval_button = gr.Button("📊 Run Evaluation", variant="primary", size="lg")
+            
+            gr.Markdown("### 📈 Quantitative Results")
+            metrics_table = gr.HTML()
+            
+            gr.Markdown("### 🖼️ Visual Comparison")
+            with gr.Row():
+                comp_input = gr.Image(label="Input", type="numpy")
+                comp_gt = gr.Image(label="Ground Truth", type="numpy")
+            
+            with gr.Row():
+                comp_eccv = gr.Image(label="ECCV16", type="numpy")
+                comp_sig = gr.Image(label="SIGGRAPH17", type="numpy")
+                comp_ddcolor = gr.Image(label="DDColor", type="numpy")
+            
+            with gr.Row():
+                comp_fusion = gr.Image(label="DDColor + Fusion", type="numpy")
+                comp_modern = gr.Image(label="DDColor + Modern", type="numpy")
+                comp_vintage = gr.Image(label="DDColor + Vintage", type="numpy")
+            
+            def handler_evaluation(input_img, gt_img, strength, progress=gr.Progress()):
+                """Performance evaluation handler"""
+                try:
+                    # Convert inputs
+                    input_img = safe_convert_to_numpy(input_img)
+                    gt_img = safe_convert_to_numpy(gt_img)
+                    
+                    if input_img is None:
+                        return "❌ Please upload input image", None, None, None, None, None, None, None, None
+                    if gt_img is None:
+                        return "❌ Please upload ground truth image", None, None, None, None, None, None, None, None
+                    
+                    # Resize GT to match input
+                    if gt_img.shape[:2] != input_img.shape[:2]:
+                        gt_img = resize(gt_img, input_img.shape[:2], preserve_range=True, anti_aliasing=True).astype(np.uint8)
+                    
+                    gt_float = gt_img.astype(np.float64) / 255.0
+                    
+                    results = []
+                    images = {}
+                    
+                    progress(0, desc="Evaluating methods...")
+                    
+                    # Method 1: ECCV16
+                    progress(0.1, desc="Running ECCV16...")
+                    eccv_img, _ = colorize_highres(input_img, strength, use_ddcolor=False)
+                    psnr_eccv, ssim_eccv = compute_metrics(gt_float, eccv_img)
+                    results.append(("ECCV16", psnr_eccv, ssim_eccv))
+                    images['eccv'] = (eccv_img * 255).astype(np.uint8)
+                    
+                    # Method 2: SIGGRAPH17
+                    progress(0.2, desc="Running SIGGRAPH17...")
+                    _, sig_img = colorize_highres(input_img, strength, use_ddcolor=False)
+                    psnr_sig, ssim_sig = compute_metrics(gt_float, sig_img)
+                    results.append(("SIGGRAPH17", psnr_sig, ssim_sig))
+                    images['sig'] = (sig_img * 255).astype(np.uint8)
+                    
+                    # Method 3: DDColor
+                    progress(0.4, desc="Running DDColor...")
+                    _, ddcolor_img = colorize_highres(input_img, strength, use_ddcolor=True)
+                    psnr_dd, ssim_dd = compute_metrics(gt_float, ddcolor_img)
+                    results.append(("DDColor", psnr_dd, ssim_dd))
+                    images['ddcolor'] = (ddcolor_img * 255).astype(np.uint8)
+                    
+                    # Method 4: DDColor + Smart Fusion
+                    progress(0.6, desc="Running DDColor + Fusion...")
+                    _, fusion_img, _ = colorize_highres_enhanced(
+                        input_img, strength, use_ensemble=True, use_ddcolor=True
+                    )
+                    psnr_fusion, ssim_fusion = compute_metrics(gt_float, fusion_img)
+                    results.append(("DDColor + Fusion", psnr_fusion, ssim_fusion))
+                    images['fusion'] = (fusion_img * 255).astype(np.uint8)
+                    
+                    # Method 5: DDColor + Modern Style
+                    progress(0.75, desc="Running DDColor + Modern Style...")
+                    _, modern_img, _ = colorize_highres_enhanced(
+                        input_img, strength, style_type='modern', use_ddcolor=True
+                    )
+                    psnr_modern, ssim_modern = compute_metrics(gt_float, modern_img)
+                    results.append(("DDColor + Modern", psnr_modern, ssim_modern))
+                    images['modern'] = (modern_img * 255).astype(np.uint8)
+                    
+                    # Method 6: DDColor + Vintage Style
+                    progress(0.9, desc="Running DDColor + Vintage Style...")
+                    _, vintage_img, _ = colorize_highres_enhanced(
+                        input_img, strength, style_type='vintage', use_ddcolor=True
+                    )
+                    psnr_vintage, ssim_vintage = compute_metrics(gt_float, vintage_img)
+                    results.append(("DDColor + Vintage", psnr_vintage, ssim_vintage))
+                    images['vintage'] = (vintage_img * 255).astype(np.uint8)
+                    
+                    # Generate HTML table
+                    progress(0.95, desc="Generating results...")
+                    
+                    # Sort by PSNR (best first)
+                    results_sorted = sorted(results, key=lambda x: x[1], reverse=True)
+                    
+                    table_html = """
+                    <div style="overflow-x: auto;">
+                    <table style='width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif;'>
+                    <thead>
+                        <tr style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;'>
+                            <th style='border:1px solid #ddd; padding:12px; text-align:left;'>Rank</th>
+                            <th style='border:1px solid #ddd; padding:12px; text-align:left;'>Method</th>
+                            <th style='border:1px solid #ddd; padding:12px; text-align:center;'>PSNR ↑</th>
+                            <th style='border:1px solid #ddd; padding:12px; text-align:center;'>SSIM ↑</th>
+                            <th style='border:1px solid #ddd; padding:12px; text-align:left;'>Quality</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    """
+                    
+                    for rank, (method, psnr, ssim) in enumerate(results_sorted, 1):
+                        # Determine quality badge
+                        if psnr >= 30 and ssim >= 0.90:
+                            quality = "<span style='background:#10b981; color:white; padding:4px 8px; border-radius:4px;'>Excellent</span>"
+                        elif psnr >= 25 and ssim >= 0.85:
+                            quality = "<span style='background:#3b82f6; color:white; padding:4px 8px; border-radius:4px;'>Good</span>"
+                        elif psnr >= 20 and ssim >= 0.75:
+                            quality = "<span style='background:#f59e0b; color:white; padding:4px 8px; border-radius:4px;'>Fair</span>"
+                        else:
+                            quality = "<span style='background:#ef4444; color:white; padding:4px 8px; border-radius:4px;'>Poor</span>"
+                        
+                        # Highlight best result
+                        if rank == 1:
+                            row_style = "background: #10b981; color: white;"
+                        elif rank == 2:
+                            row_style = "background: #6366f1; color: white;"
+                        elif rank == 3:
+                            row_style = "background: #f59e0b; color: white;"
+                        else:
+                            row_style = "background: #374151; color: #e5e7eb;"
+                        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else ""
+                        
+                        table_html += f"""
+                        <tr style='{row_style}'>
+                            <td style='border:1px solid #1f2937; padding:10px; text-align:center; font-weight:bold;'>{medal} #{rank}</td>
+                            <td style='border:1px solid #1f2937; padding:10px; font-weight:{"bold" if rank == 1 else "normal"};'>{method}</td>
+                            <td style='border:1px solid #1f2937; padding:10px; text-align:center; font-weight:bold;'>{psnr:.2f} dB</td>
+                            <td style='border:1px solid #1f2937; padding:10px; text-align:center; font-weight:bold;'>{ssim:.4f}</td>
+                            <td style='border:1px solid #1f2937; padding:10px;'>{quality}</td>
+                        </tr>
+                        """
+                    
+                    table_html += """
+                    </tbody>
+                    </table>
+                    </div>
+                    
+                    <div style='margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%); border-radius: 8px; color: white;'>
+                    <h4 style='margin-top: 0; color: #93c5fd;'>📖 Metrics Explained:</h4>
+                    <ul style='margin: 10px 0; color: #dbeafe;'>
+                        <li><strong>PSNR (Peak Signal-to-Noise Ratio)</strong>: Higher is better. >30 dB is excellent.</li>
+                        <li><strong>SSIM (Structural Similarity Index)</strong>: Range 0-1. >0.90 is excellent.</li>
+                        <li><strong>Quality Rating</strong>: Combined assessment based on both metrics.</li>
+                    </ul>
+                    <p style='margin: 10px 0; font-size: 14px; color: #bfdbfe;'>
+                    <strong>Note:</strong> Metrics are computed against the ground truth image. 
+                    Higher PSNR and SSIM indicate better color accuracy and structural preservation.
+                    </p>
+                    </div>
+                    """
+                    
+                    progress(1.0, desc="✅ Evaluation complete!")
+                    
+                    return (
+                        table_html,
+                        input_img,
+                        gt_img,
+                        images['eccv'],
+                        images['sig'],
+                        images['ddcolor'],
+                        images['fusion'],
+                        images['modern'],
+                        images['vintage']
+                    )
+                    
+                except Exception as e:
+                    error_msg = f"❌ <b>Error during evaluation:</b> {str(e)}"
+                    print(f"Evaluation error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return error_msg, None, None, None, None, None, None, None, None
+            
+            eval_button.click(
+                fn=handler_evaluation,
+                inputs=[eval_input, eval_gt, eval_strength],
+                outputs=[metrics_table, comp_input, comp_gt, comp_eccv, comp_sig, comp_ddcolor, comp_fusion, comp_modern, comp_vintage]
             )
     
     gr.Markdown("""

@@ -12,7 +12,7 @@ Architecture:
 
 Weights discovery:
 - Environment variable `DDCOLOR_WEIGHTS` pointing to model checkpoint
-- Or auto-search in: ../../../ddcolor/DDColor-master copy/modelscope/damo/cv_ddcolor_image-colorization/
+- Or auto-search in: DDColor/modelscope/damo/cv_ddcolor_image-colorization/
 - Or fallback paths: weights/ddcolor.pt, pretrain/ddcolor.pt
 
 The model is loaded from the DDColor project and integrated as the primary colorizer.
@@ -32,7 +32,7 @@ import torch.nn.functional as F
 
 # Add DDColor project to path
 _current_file = Path(__file__).resolve()
-_ddcolor_project_path = _current_file.parents[4] / "ddcolor" / "DDColor-master copy"
+_ddcolor_project_path = _current_file.parents[3] / "DDColor"
 if _ddcolor_project_path.exists():
     sys.path.insert(0, str(_ddcolor_project_path))
 
@@ -80,7 +80,7 @@ def _find_weights_path() -> Optional[Path]:
     candidates = [
         Path("weights/ddcolor.pt"),
         Path("pretrain/ddcolor.pt"),
-        Path("../ddcolor/DDColor-master copy/modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"),
+        Path("DDColor/modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"),
     ]
     for c in candidates:
         c_abs = c.expanduser().resolve()
@@ -126,7 +126,7 @@ def load_ddcolor(
         _ddcolor_model = None
         _ddcolor_load_error = (
             "DDColor weights not found. Please ensure the DDColor project is present at "
-            "../ddcolor/DDColor-master copy/ with weights in modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"
+            "DDColor/ with weights in modelscope/damo/cv_ddcolor_image-colorization/pytorch_model.pt"
         )
         return None, device
 

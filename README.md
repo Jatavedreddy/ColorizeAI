@@ -533,10 +533,10 @@ export CUDA_VISIBLE_DEVICES=""
 
 **Issue**: "DDColor weights not found"
 - **Solution**: Run `python tools/download_ddcolor_weights.py`
-- Or ensure DDColor project exists at `../ddcolor/DDColor-master copy/`
+- Or ensure DDColor project exists at `DDColor/`
 
 **Issue**: "Import basicsr.archs.ddcolor_arch failed"
-- **Solution**: Install DDColor: `cd ../ddcolor/DDColor-master\ copy && pip install -e .`
+- **Solution**: Install DDColor: `cd DDColor && pip install -e .`
 
 ### Memory Issues
 

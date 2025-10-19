@@ -21,7 +21,7 @@ echo ""
 echo "Step 2: Setting up DDColor project..."
 
 # Check if DDColor project exists
-DDCOLOR_PATH="../ddcolor/DDColor-master copy"
+DDCOLOR_PATH="DDColor"
 if [ -d "$DDCOLOR_PATH" ]; then
     echo "✓ DDColor project found at $DDCOLOR_PATH"
     
