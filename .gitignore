@@ -1,13 +1,16 @@
-# Documentation and analysis files
-docs/guide.txt
-docs/ANALYSIS_AND_FIXES.md
-docs/UNIQUE_FEATURES.md
+# Temporary notes (keep research papers in repo)
+leftpoint.txt
+*.tmp
+*.bak
 
 # Cache directories
 cache/
 *.cache/
+.pytest_cache/
 
 # Backup files
+*_old.py
+*_backup.py
 app_old.py
 app_unified.py
 

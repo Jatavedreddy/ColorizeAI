@@ -29,6 +29,7 @@ from colorizeai.core.colorization import colorize_highres, colorize_highres_enha
 # Cache removed: no caching helpers imported
 from colorizeai.utils.metrics import compute_metrics
 from colorizeai.features.temporal_consistency import TemporalConsistencyEngine
+from colorizeai.core.ddcolor_model import is_ddcolor_available
 
 # Initialize components
 temporal_engine = TemporalConsistencyEngine()
@@ -55,17 +56,35 @@ def _autocast(device):
         yield
 
 
-def handler_single(input_img: np.ndarray, strength: float, gt_img: np.ndarray | None):
-    """Basic single image handler"""
+def handler_single(input_img, strength: float, gt_img, use_ddcolor: bool = True):
+    """
+    Basic single image handler.
+    
+    Now uses DDColor as the primary model when available, with ECCV16/SIGGRAPH17 as fallback.
+    """
     if input_img is None:
         return None, None, "<span style='color:red'>Please upload an image.</span>"
 
-    # Direct processing (cache removed)
-    eccv_img, sig_img = colorize_highres(input_img, strength)
+    # Convert to numpy array if needed
+    if not isinstance(input_img, np.ndarray):
+        if isinstance(input_img, Image.Image):
+            input_img = np.array(input_img)
+        else:
+            return None, None, "<span style='color:red'>Invalid image format.</span>"
+    
+    # Convert gt_img if provided
+    if gt_img is not None and not isinstance(gt_img, np.ndarray):
+        if isinstance(gt_img, Image.Image):
+            gt_img = np.array(gt_img)
+
+    # Direct processing with DDColor support
+    eccv_img, primary_img = colorize_highres(input_img, strength, use_ddcolor=use_ddcolor)
 
     slider_eccv = (input_img, (eccv_img * 255).astype(np.uint8))
-    slider_sig = (input_img, (sig_img * 255).astype(np.uint8))
+    slider_primary = (input_img, (primary_img * 255).astype(np.uint8))
 
+    model_name = "DDColor" if use_ddcolor and is_ddcolor_available() else "SIGGRAPH17"
+    
     metrics_html = "<b>No ground-truth supplied &ndash; metrics not computed.</b>"
     if gt_img is not None:
         # Resize GT if necessary
@@ -75,29 +94,55 @@ def handler_single(input_img: np.ndarray, strength: float, gt_img: np.ndarray | 
             gt_resized = gt_img
         gt_float = gt_resized.astype(np.float64) / 255.0
         eccv_float = eccv_img
-        sig_float = sig_img
+        primary_float = primary_img
         psnr_eccv, ssim_eccv = compute_metrics(gt_float, eccv_float)
-        psnr_sig, ssim_sig = compute_metrics(gt_float, sig_float)
+        psnr_primary, ssim_primary = compute_metrics(gt_float, primary_float)
         metrics_html = f"""<table>
         <tr><th></th><th>PSNR</th><th>SSIM</th></tr>
         <tr><td>ECCV16</td><td>{psnr_eccv:.2f}</td><td>{ssim_eccv:.3f}</td></tr>
-        <tr><td>SIGGRAPH17</td><td>{psnr_sig:.2f}</td><td>{ssim_sig:.3f}</td></tr>
+        <tr><td>{model_name}</td><td>{psnr_primary:.2f}</td><td>{ssim_primary:.3f}</td></tr>
         </table>"""
 
-    return slider_eccv, slider_sig, metrics_html
+    return slider_eccv, slider_primary, metrics_html
 
 def handler_single_enhanced(
-    input_img: np.ndarray, 
+    input_img, 
     strength: float, 
-    gt_img: np.ndarray | None,
+    gt_img,
     use_ensemble: bool,
-    reference_img: np.ndarray | None,
+    reference_img,
     style_type: str,
-    color_hints_json: str
+    color_hints_json: str,
+    use_ddcolor: bool = True
 ):
-    """Enhanced single image handler with all new features"""
+    """
+    Enhanced single image handler with all features.
+    
+    Now uses DDColor as the base model with additional features layered on top:
+    - Optional ensemble with ECCV16/SIGGRAPH17
+    - Reference-guided colorization
+    - Interactive color hints
+    - Style transfer presets
+    """
     if input_img is None:
         return None, None, "<span style='color:red'>Please upload an image.</span>", None
+
+    # Convert to numpy array if needed
+    if not isinstance(input_img, np.ndarray):
+        if isinstance(input_img, Image.Image):
+            input_img = np.array(input_img)
+        else:
+            return None, None, "<span style='color:red'>Invalid image format.</span>", None
+    
+    # Convert gt_img if provided
+    if gt_img is not None and not isinstance(gt_img, np.ndarray):
+        if isinstance(gt_img, Image.Image):
+            gt_img = np.array(gt_img)
+    
+    # Convert reference_img if provided
+    if reference_img is not None and not isinstance(reference_img, np.ndarray):
+        if isinstance(reference_img, Image.Image):
+            reference_img = np.array(reference_img)
 
     # Parse color hints from JSON string (if provided)
     color_hints = []
@@ -107,13 +152,16 @@ def handler_single_enhanced(
         except:
             pass
 
-    eccv_img, sig_img, metadata = colorize_highres_enhanced(
-        input_img, strength, use_ensemble, reference_img, color_hints, style_type
+    eccv_img, enhanced_img, metadata = colorize_highres_enhanced(
+        input_img, strength, use_ensemble, reference_img, color_hints, style_type, use_ddcolor=use_ddcolor
     )
 
     slider_eccv = (input_img, (eccv_img * 255).astype(np.uint8))
-    slider_sig = (input_img, (sig_img * 255).astype(np.uint8))
+    slider_enhanced = (input_img, (enhanced_img * 255).astype(np.uint8))
 
+    # Model name based on what was actually used
+    model_name = "DDColor Enhanced" if metadata.get('ddcolor_used', False) else "SIGGRAPH17 Enhanced"
+    
     # Generate enhanced metrics HTML
     metrics_html = "<b>No ground-truth supplied &ndash; metrics not computed.</b>"
     if gt_img is not None:
@@ -123,28 +171,44 @@ def handler_single_enhanced(
             gt_resized = gt_img
         gt_float = gt_resized.astype(np.float64) / 255.0
         eccv_float = eccv_img
-        sig_float = sig_img
+        enhanced_float = enhanced_img
         psnr_eccv, ssim_eccv = compute_metrics(gt_float, eccv_float)
-        psnr_sig, ssim_sig = compute_metrics(gt_float, sig_float)
+        psnr_enhanced, ssim_enhanced = compute_metrics(gt_float, enhanced_float)
         
         metrics_html = f"""<table style="width:100%">
         <tr><th>Model</th><th>PSNR</th><th>SSIM</th></tr>
-        <tr><td>ECCV16</td><td>{psnr_eccv:.2f}</td><td>{ssim_eccv:.3f}</td></tr>
-        <tr><td>Enhanced</td><td>{psnr_sig:.2f}</td><td>{ssim_sig:.3f}</td></tr>
+        <tr><td>ECCV16 (Baseline)</td><td>{psnr_eccv:.2f}</td><td>{ssim_eccv:.3f}</td></tr>
+        <tr><td>{model_name}</td><td>{psnr_enhanced:.2f}</td><td>{ssim_enhanced:.3f}</td></tr>
         </table>"""
 
     # Generate metadata display
     metadata_html = "<h4>Processing Information:</h4><ul>"
-    for key, value in metadata.items():
-        if key == 'ensemble_weights':
-            metadata_html += f"<li><b>Model Weights:</b> ECCV16: {value['eccv16']:.2f}, SIGGRAPH17: {value['siggraph17']:.2f}</li>"
-        elif key == 'image_characteristics':
-            metadata_html += f"<li><b>Image Analysis:</b> Texture: {value.get('texture_complexity', 0):.2f}, Contrast: {value.get('contrast', 0):.2f}</li>"
-        else:
-            metadata_html += f"<li><b>{key.replace('_', ' ').title()}:</b> {value}</li>"
+    metadata_html += f"<li><b>Base Model:</b> {'DDColor' if metadata.get('ddcolor_used', False) else 'SIGGRAPH17'}</li>"
+    
+    features = metadata.get('features_applied', [])
+    if features:
+        metadata_html += f"<li><b>Features Applied:</b> {', '.join(features)}</li>"
+    
+    if 'ensemble_weights' in metadata:
+        weights = metadata['ensemble_weights']
+        metadata_html += f"<li><b>Model Weights:</b> ECCV16: {weights['eccv16']:.2f}, SIGGRAPH17: {weights['siggraph17']:.2f}</li>"
+    
+    if 'image_characteristics' in metadata:
+        chars = metadata['image_characteristics']
+        metadata_html += f"<li><b>Image Analysis:</b> Texture: {chars.get('texture_complexity', 0):.2f}, Contrast: {chars.get('contrast', 0):.2f}</li>"
+    
+    if metadata.get('reference_guided'):
+        metadata_html += "<li><b>Reference Guidance:</b> Applied</li>"
+    
+    if 'color_hints_applied' in metadata:
+        metadata_html += f"<li><b>Color Hints:</b> {metadata['color_hints_applied']} hints applied</li>"
+    
+    if 'style_applied' in metadata:
+        metadata_html += f"<li><b>Style:</b> {metadata['style_applied']}</li>"
+    
     metadata_html += "</ul>"
 
-    return slider_eccv, slider_sig, metrics_html, metadata_html
+    return slider_eccv, slider_enhanced, metrics_html, metadata_html
 
 def handler_batch(files: List[str] | None, strength: float, progress=gr.Progress()):
     """Batch processing handler"""
@@ -501,13 +565,26 @@ def build_interface():
     """
     )
 
+        # Runtime status: device + DDColor availability
+        try:
+            dd_on = bool(is_ddcolor_available())
+        except Exception:
+            dd_on = False
+        device_name = DEVICE.type.upper()
+        gr.HTML((f"<div style='padding:8px 12px;border-radius:8px;background:#f6f8fa;border:1px solid #e2e8f0;margin-bottom:8px'>"
+                 f"<b>Runtime:</b> Device <code>{device_name}</code> • "
+                 + ("<span style='color:#0a7d02'>🟢 DDColor active</span> (TorchScript weights detected)"
+                    if dd_on else
+                    "<span style='color:#a40000'>🔴 DDColor not available</span> – using ECCV16/SIGGRAPH17 baselines")
+                 + "</div>"))
+
         with gr.Tabs():
             # ----- Basic Single Image -----
             with gr.TabItem("🖼️ Basic Single Image"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        inp_img = gr.Image(type="numpy", label="📤 Upload Image", height=300)
-                        gt_img = gr.Image(type="numpy", label="🎯 Ground-truth Image (optional)", height=300)
+                        inp_img = gr.Image(label="📤 Upload Image", height=300)
+                        gt_img = gr.Image(label="🎯 Ground-truth Image (optional)", height=300)
                     with gr.Column(scale=1):
                         strength_slider = gr.Slider(0, 1, value=1.0, step=0.1, label="🎨 Colorization Strength", 
                                                    info="Lower values blend with original grayscale")
@@ -523,18 +600,19 @@ def build_interface():
                 metrics_html = gr.HTML()
 
                 run_btn.click(
-                    handler_single,
+                    fn=handler_single,
                     inputs=[inp_img, strength_slider, gt_img],
                     outputs=[slider_eccv, slider_sig, metrics_html],
+                    api_name="colorize_basic"
                 )
 
             # ----- Enhanced Single Image -----
             with gr.TabItem("🚀 Enhanced Single Image"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        inp_img_enh = gr.Image(type="numpy", label="📤 Upload B&W Image", height=300)
-                        gt_img_enh = gr.Image(type="numpy", label="🎯 Ground-truth (optional)", height=200)
-                        reference_img = gr.Image(type="numpy", label="🌈 Reference Image (optional)", height=200)
+                        inp_img_enh = gr.Image(label="📤 Upload B&W Image", height=300)
+                        gt_img_enh = gr.Image(label="🎯 Ground-truth (optional)", height=200)
+                        reference_img = gr.Image(label="🌈 Reference Image (optional)", height=200)
                         
                     with gr.Column(scale=1):
                         strength_slider_enh = gr.Slider(0, 1, value=1.0, step=0.1, 
@@ -565,10 +643,11 @@ def build_interface():
                     metadata_html = gr.HTML()
 
                 run_enhanced_btn.click(
-                    handler_single_enhanced,
+                    fn=handler_single_enhanced,
                     inputs=[inp_img_enh, strength_slider_enh, gt_img_enh, use_ensemble, reference_img, 
                            style_type, color_hints_json],
                     outputs=[slider_eccv_enh, slider_sig_enh, metrics_html_enh, metadata_html],
+                    api_name="colorize_enhanced"
                 )
 
             # ----- Batch Processing -----
@@ -607,9 +686,10 @@ def build_interface():
                 zip_out = gr.File(label="📥 Download ZIP Archive (Contains both model results)")
 
                 run_batch.click(
-                    handler_batch,
+                    fn=handler_batch,
                     inputs=[files_input, strength_slider2],
                     outputs=[gallery_eccv, gallery_sig, zip_out, batch_status],
+                    api_name="batch_process"
                 )
 
             # ----- Video Colorization -----
@@ -671,9 +751,10 @@ def build_interface():
                 resolution.change(show_custom_fields, inputs=resolution, outputs=[custom_width, custom_height])
 
                 run_vid.click(
-                    handler_video,
+                    fn=handler_video,
                     inputs=[vid_input, strength_slider3, frame_skip, resolution, custom_width, custom_height, fast_mode, use_temporal, style_type_video],
                     outputs=vid_out,
+                    api_name="colorize_video"
                 )
         
     # Enhanced Footer
