@@ -1,0 +1,2 @@
+filename,PSNR,SSIM,LPIPS,CIEDE2000,Colorfulness_Pred,Colorfulness_GT
+c_photo1.jpg,inf,1.0,0.0,0.0,0.2398200292181038,0.2398200292181038

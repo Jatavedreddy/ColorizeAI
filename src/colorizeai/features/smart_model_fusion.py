@@ -58,8 +58,32 @@ class SmartModelFusion:
         
         return characteristics
     
-    def calculate_model_weights(self, characteristics):
+    def calculate_model_weights(self, characteristics, use_ddcolor=False):
         """Calculate optimal weights for each model based on image characteristics"""
+        
+        if use_ddcolor:
+            # DDColor is generally superior, so we give it high base weight
+            # We only blend in others if texture complexity is very high (where DDColor might be too smooth)
+            ddcolor_weight = 0.85
+            
+            # If texture is complex, give more weight to SIGGRAPH17 (good at texture)
+            if characteristics['texture_complexity'] > 0.5:
+                ddcolor_weight -= 0.15
+                siggraph17_weight = 0.15
+                eccv16_weight = 0.0
+            else:
+                # Otherwise trust DDColor more
+                ddcolor_weight += 0.1
+                siggraph17_weight = 0.05
+                eccv16_weight = 0.0
+                
+            return {
+                'ddcolor': ddcolor_weight,
+                'eccv16': eccv16_weight,
+                'siggraph17': siggraph17_weight
+            }
+
+        # Legacy logic for just ECCV16/SIGGRAPH17
         # ECCV16 tends to be better for:
         # - High contrast images
         # - Images with clear objects
@@ -97,19 +121,37 @@ class SmartModelFusion:
             'siggraph17': siggraph17_weight
         }
     
-    def adaptive_fusion(self, eccv16_result, siggraph17_result, grayscale_img):
+    def adaptive_fusion(self, eccv16_result, siggraph17_result, grayscale_img, ddcolor_result=None):
         """Perform adaptive fusion of model results"""
         # Analyze image characteristics
         characteristics = self.analyze_image_characteristics(grayscale_img)
         
         # Calculate model weights
-        weights = self.calculate_model_weights(characteristics)
+        weights = self.calculate_model_weights(characteristics, use_ddcolor=(ddcolor_result is not None))
         
         # Convert to LAB for better blending
         eccv16_lab = rgb2lab(eccv16_result)
         siggraph17_lab = rgb2lab(siggraph17_result)
         
-        # Perform spatially-varying fusion
+        if ddcolor_result is not None:
+            ddcolor_lab = rgb2lab(ddcolor_result)
+            
+            # Simple weighted blend for now (spatially varying is complex with 3 models)
+            # But we can still use the smart weights we calculated
+            fused_lab = np.zeros_like(ddcolor_lab)
+            fused_lab[:,:,0] = ddcolor_lab[:,:,0] # Use L from DDColor (should be same as input)
+            
+            for channel in [1, 2]:
+                fused_lab[:,:,channel] = (
+                    weights['ddcolor'] * ddcolor_lab[:,:,channel] +
+                    weights['siggraph17'] * siggraph17_lab[:,:,channel] +
+                    weights['eccv16'] * eccv16_lab[:,:,channel]
+                )
+                
+            fused_rgb = lab2rgb(fused_lab)
+            return np.clip(fused_rgb, 0, 1), weights, characteristics
+
+        # Perform spatially-varying fusion (Legacy 2-model)
         fused_lab = self.spatially_varying_fusion(
             eccv16_lab, siggraph17_lab, grayscale_img, weights
         )
@@ -171,7 +213,7 @@ class SmartModelFusion:
         
         return fused_lab
 
-def ensemble_colorization(grayscale_img, eccv16_result, siggraph17_result):
+def ensemble_colorization(grayscale_img, eccv16_result, siggraph17_result, ddcolor_result=None):
     """
     Main function to perform ensemble colorization
     
@@ -179,6 +221,7 @@ def ensemble_colorization(grayscale_img, eccv16_result, siggraph17_result):
         grayscale_img: Input grayscale image
         eccv16_result: Colorization result from ECCV16 model
         siggraph17_result: Colorization result from SIGGRAPH17 model
+        ddcolor_result: Colorization result from DDColor model (optional)
     
     Returns:
         tuple: (fused_result, weights_used, image_characteristics)
@@ -186,7 +229,7 @@ def ensemble_colorization(grayscale_img, eccv16_result, siggraph17_result):
     fusion_engine = SmartModelFusion()
     
     fused_result, weights, characteristics = fusion_engine.adaptive_fusion(
-        eccv16_result, siggraph17_result, grayscale_img
+        eccv16_result, siggraph17_result, grayscale_img, ddcolor_result=ddcolor_result
     )
     
     return fused_result, weights, characteristics

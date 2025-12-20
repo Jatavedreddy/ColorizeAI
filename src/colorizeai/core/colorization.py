@@ -22,6 +22,7 @@ from ..features.smart_model_fusion import ensemble_colorization
 from ..features.reference_guided_colorization import apply_reference_guided_colorization
 from ..features.interactive_color_hints import apply_color_hints
 from ..features.style_transfer_colorization import apply_style_to_colorization
+from ..features.post_processing import enhance_colorization
 
 
 def _predict_ab(model, l_channel: np.ndarray) -> np.ndarray:
@@ -134,7 +135,7 @@ def colorize_highres_enhanced(
     use_ensemble: bool = True,
     reference_img: np.ndarray = None,
     color_hints: list = None,
-    style_type: str = 'modern',
+    style_type: str = 'none',
     use_ddcolor: bool = True
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
@@ -234,20 +235,42 @@ def colorize_highres_enhanced(
             print(f"⚠ Ensemble fusion failed: {e}")
             metadata['ensemble_error'] = str(e)
     elif use_ensemble and metadata["ddcolor_used"]:
-        # For DDColor, optionally blend with SIGGRAPH17 for texture
+        # For DDColor, use Smart Fusion to blend with classic models based on texture
         try:
-            (_, colorizer_siggraph17), _ = get_models()
+            (colorizer_eccv16, colorizer_siggraph17), _ = get_models()
             img_lab_orig = rgb2lab(img)
             img_l_orig = img_lab_orig[:, :, 0]
             img_small = resize(img, (256, 256), preserve_range=True)
             img_lab_small = rgb2lab(img_small)
             img_l_small = img_lab_small[:, :, 0]
+            
+            # Get predictions from classic models
             ab_sig = _predict_ab(colorizer_siggraph17, img_l_small)
             ab_sig_up = resize(ab_sig, (h, w), preserve_range=True)
             sig_rgb = lab2rgb(np.concatenate((img_l_orig[:, :, np.newaxis], ab_sig_up), axis=2))
             
-            # Light fusion: 80% DDColor, 20% SIGGRAPH17 for texture detail
-            ensemble_result = 0.8 * primary_rgb + 0.2 * sig_rgb
+            ab_eccv = _predict_ab(colorizer_eccv16, img_l_small)
+            ab_eccv_up = resize(ab_eccv, (h, w), preserve_range=True)
+            eccv_rgb = lab2rgb(np.concatenate((img_l_orig[:, :, np.newaxis], ab_eccv_up), axis=2))
+            
+            # Use Smart Fusion with all 3 models
+            fused_result, weights, characteristics = ensemble_colorization(
+                (img * 255).astype(np.uint8), 
+                eccv_rgb, 
+                sig_rgb, 
+                ddcolor_result=primary_rgb
+            )
+            
+            metadata['ensemble_weights'] = weights
+            metadata['image_characteristics'] = characteristics
+            ensemble_result = fused_result
+            metadata['features_applied'].append('smart_fusion_ddcolor')
+            print(f"✓ Smart Fusion applied: {weights}")
+            
+        except Exception as e:
+            print(f"⚠ Smart Fusion failed: {e}")
+            metadata['ensemble_error'] = str(e)
+            ensemble_result = primary_rgb
             metadata['features_applied'].append('ddcolor_sig_fusion')
         except Exception as e:
             print(f"⚠ DDColor-SIG fusion failed: {e}")
@@ -297,6 +320,15 @@ def colorize_highres_enhanced(
     strength = float(strength)
     out_eccv_rgb = (1 - strength) * img + strength * out_eccv_rgb
     ensemble_result = (1 - strength) * img + strength * ensemble_result
+    
+    # FINAL STEP: Advanced Post-Processing (The "Secret Sauce")
+    # This applies Guided Filter refinement and Adaptive Vibrance
+    # We apply this to the final result to ensure maximum quality
+    try:
+        ensemble_result = enhance_colorization(ensemble_result, img, strength=strength)
+        metadata['features_applied'].append('post_processing_enhancement')
+    except Exception as e:
+        print(f"⚠ Post-processing failed: {e}")
 
     return out_eccv_rgb, ensemble_result, metadata
 

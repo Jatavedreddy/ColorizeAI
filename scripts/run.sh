@@ -4,9 +4,18 @@
 
 set -e
 
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+# Get the project root (parent of scripts)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Change to project root
+cd "$PROJECT_ROOT"
+
 echo "=========================================="
 echo "🎨 ColorizeAI Launcher"
 echo "=========================================="
+echo "Working directory: $PWD"
 echo ""
 
 # Check if conda is available
@@ -48,11 +57,11 @@ fi
 echo ""
 echo "🚀 Starting ColorizeAI..."
 echo "   URL: http://127.0.0.1:7860"
-echo "   Using: main_fixed.py (Gradio 5.x compatible)"
+echo "   Using: main.py"
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo "=========================================="
 echo ""
 
-# Activate environment and run the fixed version
-conda run -n colorize python main_fixed.py
+# Activate environment and run the main version
+conda run -n colorize python main.py
