@@ -1,7 +1,0 @@
-=== Performance Summary ===
-PSNR: inf
-SSIM: 1.0000
-LPIPS: 0.0000
-CIEDE2000: 0.0000
-Colorfulness (Pred): 0.2398
-Colorfulness (GT): 0.2398

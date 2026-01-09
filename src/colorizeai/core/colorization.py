@@ -130,13 +130,14 @@ def colorize_highres(image_np: np.ndarray, strength: float = 1.0, use_ddcolor: b
 
 
 def colorize_highres_enhanced(
-    image_np: np.ndarray, 
+    image_np: np.ndarray,
     strength: float = 1.0,
     use_ensemble: bool = True,
     reference_img: np.ndarray = None,
     color_hints: list = None,
     style_type: str = 'none',
-    use_ddcolor: bool = True
+    use_ddcolor: bool = True,
+    **kwargs
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     Enhanced colorization pipeline with multiple features.
@@ -162,7 +163,21 @@ def colorize_highres_enhanced(
                - primary_result: DDColor-based enhanced result with all features
                - metadata: dict with processing info, weights, characteristics
     """
+    # Handle argument aliases for compatibility with new UI calls
+    if 'reference_image' in kwargs and reference_img is None:
+        reference_img = kwargs['reference_image']
+    if 'style' in kwargs:
+        style = kwargs['style']
+        if style is not None and style != 'none':
+             style_type = style
+
     # Ensure float in [0,1]
+    # Check for grayscale input (2D or 1-channel) and convert to RGB
+    if image_np.ndim == 2:
+        image_np = np.stack((image_np,)*3, axis=-1)
+    elif image_np.ndim == 3 and image_np.shape[2] == 1:
+        image_np = np.concatenate((image_np,)*3, axis=-1)
+
     if image_np.dtype != np.float64 and image_np.dtype != np.float32:
         img = image_np.astype(np.float64) / 255.0
     else:
@@ -171,8 +186,15 @@ def colorize_highres_enhanced(
     h, w = img.shape[:2]
     metadata = {"ddcolor_used": False, "features_applied": []}
 
+    # Validating kwargs
+    reference_strength = kwargs.get('reference_strength', 0.9) # FORCE HIGH DEFAULT
+
+    print(f"DEBUG: Colorize Start. Input: {img.shape}, RefImg: {reference_img is not None}, RefStrength: {reference_strength}")
+
     # Try DDColor first if enabled
     primary_rgb = None
+    out_sig_rgb = None # Initialize to avoid UnboundLocalError
+
     if use_ddcolor and is_ddcolor_available():
         try:
             img_bgr = cv2.cvtColor((img * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
@@ -207,27 +229,65 @@ def colorize_highres_enhanced(
 
         out_eccv_rgb = _lab_to_rgb(img_l_orig, ab_eccv_up)
         primary_rgb = _lab_to_rgb(img_l_orig, ab_sig_up)
+        out_sig_rgb = primary_rgb # Capture SIGGRAPH17 result for fusion
     else:
         # Compute ECCV for comparison
-        (colorizer_eccv16, _), _ = get_models()
+        (colorizer_eccv16, colorizer_siggraph17), _ = get_models()
         img_lab_orig = rgb2lab(img)
         img_l_orig = img_lab_orig[:, :, 0]
         img_small = resize(img, (256, 256), preserve_range=True)
         img_lab_small = rgb2lab(img_small)
         img_l_small = img_lab_small[:, :, 0]
+        
         ab_eccv = _predict_ab(colorizer_eccv16, img_l_small)
         ab_eccv_up = resize(ab_eccv, (h, w), preserve_range=True)
         out_eccv_rgb = lab2rgb(np.concatenate((img_l_orig[:, :, np.newaxis], ab_eccv_up), axis=2))
+        
+        # If fusion is requested, we also need SIGGRAPH17 result
+        if use_ensemble:
+            try:
+                ab_sig = _predict_ab(colorizer_siggraph17, img_l_small)
+                ab_sig_up = resize(ab_sig, (h, w), preserve_range=True)
+                out_sig_rgb = lab2rgb(np.concatenate((img_l_orig[:, :, np.newaxis], ab_sig_up), axis=2))
+            except Exception as e:
+                print(f"Warning: Could not compute SIGGRAPH17 for fusion: {e}")
+                out_sig_rgb = out_eccv_rgb # Fallback
 
-    # Apply ensemble fusion if requested (blend DDColor with classic models)
+    # Apply ensemble fusion if requested
     ensemble_result = primary_rgb
-    if use_ensemble and not metadata["ddcolor_used"]:
-        # Only fuse if we're using classic models (DDColor is already strong)
+    if use_ensemble:
         try:
+            print("Running Smart Fusion...")
+            image_uint8 = (img * 255).astype(np.uint8)
+            
+            # Convert to grayscale for analysis (fix for 2D array error)
+            if image_uint8.ndim == 3 and image_uint8.shape[2] == 3:
+                gray_input = cv2.cvtColor(image_uint8, cv2.COLOR_RGB2GRAY)
+            else:
+                gray_input = image_uint8
+            
+            # Ensure siggraph input is available
+            siggraph_input = out_sig_rgb
+            if siggraph_input is None:
+                siggraph_input = primary_rgb if not metadata["ddcolor_used"] else out_eccv_rgb
+
+            ddcolor_input = primary_rgb if metadata["ddcolor_used"] else None
+            
             fused_result, weights, characteristics = ensemble_colorization(
-                (img * 255).astype(np.uint8), out_eccv_rgb, primary_rgb
+                gray_input, 
+                out_eccv_rgb, 
+                siggraph_input, 
+                ddcolor_result=ddcolor_input
             )
             metadata['ensemble_weights'] = weights
+            metadata['image_characteristics'] = characteristics
+            ensemble_result = fused_result
+            metadata['features_applied'].append('ensemble')
+            print(f"Fusion complete. Weights: {weights}")
+        except Exception as e:
+            print(f"⚠ Ensemble fusion failed: {e}")
+            metadata['ensemble_error'] = str(e)
+
             metadata['image_characteristics'] = characteristics
             ensemble_result = fused_result
             metadata['features_applied'].append('ensemble')
@@ -278,14 +338,16 @@ def colorize_highres_enhanced(
     # Apply reference guidance if provided
     if reference_img is not None:
         try:
+            print(f"DEBUG: Applying Reference Guidance. RefShape: {reference_img.shape}")
             ensemble_result = apply_reference_guided_colorization(
                 (img * 255).astype(np.uint8),
                 reference_img,
                 ensemble_result,
-                guidance_strength=0.3
+                guidance_strength=reference_strength
             )
             metadata['reference_guided'] = True
             metadata['features_applied'].append('reference_guided')
+            print("DEBUG: Reference Guidance Applied.")
         except Exception as e:
             print(f"⚠ Reference guidance failed: {e}")
             metadata['reference_error'] = str(e)
