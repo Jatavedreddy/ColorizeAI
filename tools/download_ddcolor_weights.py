@@ -74,12 +74,11 @@ def download_ddcolor_weights(model_size: str = 'large'):
             return True
     
     # Hugging Face model URLs
-    # Note: Update these URLs with actual DDColor Hugging Face model repository
     if model_size == 'large':
-        url = "https://huggingface.co/piddnad/ddcolor-models/resolve/main/pytorch_model.pt"
+        url = "https://huggingface.co/piddnad/DDColor-models/resolve/main/ddcolor_modelscope.pth"
         desc = "DDColor Large Model"
     else:
-        url = "https://huggingface.co/piddnad/ddcolor-models/resolve/main/pytorch_model_tiny.pt"
+        url = "https://huggingface.co/piddnad/DDColor-models/resolve/main/ddcolor_paper_tiny.pth"
         desc = "DDColor Tiny Model"
     
     print(f"\nAttempting to download {desc}...")
