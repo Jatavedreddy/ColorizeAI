@@ -6,5 +6,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "DDColor"))
 
 if __name__ == "__main__":
     from backend.app import app
-    print("Starting Flask ColorizeAI UI...")
-    app.run(host="127.0.0.1", port=8080, debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    print(f"Starting Flask ColorizeAI UI on port {port}...")
+    app.run(host="0.0.0.0", port=port, debug=False)
