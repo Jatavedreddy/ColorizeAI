@@ -47,7 +47,7 @@ def download_ddcolor_weights(model_size: str = 'large'):
     project_root = script_dir.parent
     
     # Target location in DDColor project folder
-    ddcolor_project = project_root.parent / "ddcolor" / "DDColor-master copy"
+    ddcolor_project = project_root / "DDColor"
     weights_dir = ddcolor_project / "modelscope" / "damo" / "cv_ddcolor_image-colorization"
     weights_file = weights_dir / "pytorch_model.pt"
     

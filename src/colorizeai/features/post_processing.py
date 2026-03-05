@@ -68,10 +68,20 @@ def enhance_colorization(rgb_pred, gray_orig, strength=1.0):
     lab_pred = rgb2lab(rgb_pred)
     l_pred, a_pred, b_pred = lab_pred[:,:,0], lab_pred[:,:,1], lab_pred[:,:,2]
     
+    # Ensure gray_orig is 2D
+    if len(gray_orig.shape) == 3:
+        if gray_orig.shape[2] == 3:
+            # Pick first channel or convert
+            gray_2d = np.mean(gray_orig, axis=2)
+        else:
+            gray_2d = gray_orig[:, :, 0]
+    else:
+        gray_2d = gray_orig
+        
     # 2. Guided Filter Refinement (The "Edge Snapping")
     # We use the original grayscale as the guide for the color channels
     # Note: rgb2lab L is 0-100, gray_orig is 0-1. Scale gray_orig.
-    l_guide = gray_orig * 100.0
+    l_guide = gray_2d * 100.0
     ab_refined = apply_guided_filter_refinement(l_guide, np.dstack([a_pred, b_pred]))
     
     # 3. Recombine with Original L (Luminance Preservation)
