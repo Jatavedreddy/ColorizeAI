@@ -1,10 +1,6 @@
 # 🎨 ColorizeAI - Advanced Image & Video Colorization System# 🎨 ColorizeAI - Complete Image & Video Colorization Suite
 
-
-
 A production-ready AI colorization system implementing **DDColor** (diffusion-based base model) with advanced features for image and video colorization. Built with a modular architecture supporting reference-guided colorization, interactive hints, style transfer, and temporal consistency.A comprehensive AI-powered colorization system that transforms black and white images and videos into vibrant colored versions using state-of-the-art deep learning models.
-
-
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)## 🚀 Features
 
@@ -19,8 +15,6 @@ A production-ready AI colorization system implementing **DDColor** (diffusion-ba
 - **High-resolution processing** preserving original image quality
 
 ColorizeAI transforms grayscale images and videos into vibrant colored versions using state-of-the-art deep learning. The system implements **DDColor** (our base paper) as the primary colorization engine, with five advanced feature enhancements derived from recent research.- **Adjustable colorization strength** for artistic control
-
-
 
 ### Key Features
 
@@ -260,13 +254,13 @@ Opens Gradio interface at http://localhost:7860
 
 1. **Clone the repository:**
 
-```bash   ```bash
+``bash   ``bash
 
 python tests/test_ddcolor_integration.py   git clone https://github.com/Jatavedreddy/ColorizeAI.git
 
-```   cd ColorizeAI
+```cd
 
-   ```
+```
 
 ## 💡 Usage
 
@@ -279,25 +273,19 @@ python tests/test_ddcolor_integration.py   git clone https://github.com/Jatavedr
 1. **Single Image Tab**   ```
 
    - Upload grayscale image
-
    - Adjust colorization strength (0-1)3. **Run the application:**
-
    - Click "Colorize"   ```bash
-
    - View ECCV16 baseline vs DDColor/SIGGRAPH17 results   python main.py
 
    ```
 
+   ```
 2. **Enhanced Colorization Tab**
 
    - Enable Smart Model Fusion for texture enhancement4. **Open your browser** and navigate to the displayed URL (typically `http://127.0.0.1:7860`)
-
    - Upload reference image for palette guidance
-
    - Add color hints (JSON format)### Development Installation
-
    - Select style preset (modern, vintage, cinematic, etc.)
-
    - View processing metadataFor development with additional tools:
 
 ```bash
@@ -520,15 +508,18 @@ export CUDA_VISIBLE_DEVICES=""
 ### DDColor Not Loading
 
 **Issue**: "DDColor weights not found"
+
 - **Solution**: Run `python tools/download_ddcolor_weights.py`
 - Or ensure DDColor project exists at `DDColor/`
 
 **Issue**: "Import basicsr.archs.ddcolor_arch failed"
+
 - **Solution**: Install DDColor: `cd DDColor && pip install -e .`
 
 ### Memory Issues
 
 **CUDA Out of Memory**:
+
 ```python
 # Reduce resolution
 result = colorize_image(img, input_size=256)
@@ -540,6 +531,7 @@ result = colorize_image(img, model_size='tiny')
 ### Fallback Behavior
 
 If DDColor fails, the system automatically uses SIGGRAPH17/ECCV16:
+
 - No errors thrown
 - Console warning shown
 - `metadata['ddcolor_used']` = `False`
@@ -576,6 +568,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 📧 Contact
 
 For questions or issues:
+
 - Open a GitHub issue
 - Check documentation in `docs/`
 - Run verification: `python tests/test_ddcolor_integration.py`

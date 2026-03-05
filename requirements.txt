@@ -3,7 +3,9 @@ torch>=1.7
 torchvision
 numpy>=1.24.0
 scikit-image>=0.22.0
-gradio
+Flask
+Flask-Cors
+Werkzeug
 Pillow>=10.0.0
 opencv-python>=4.7.0
 moviepy
@@ -27,4 +29,3 @@ torch-fidelity
 
 # Optional but recommended
 wandb  # For experiment tracking
-gradio-imageslider  # For before/after comparisons

@@ -13,11 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from colorizeai.utils.metrics import (
     compute_metrics,
-    compute_ciede2000,
     compute_lpips,
     colorfulness_index,
-    compute_ab_mse
-)
+    )
 from colorizeai.utils.fid import (
     INCEPTION_V3_FID,
     get_activations,
@@ -112,7 +110,7 @@ def main():
             
             psnr, ssim = compute_metrics(gt_img, pred_img)
             lpips_val = compute_lpips(gt_img, pred_img)
-            ciede = compute_ciede2000(gt_img, pred_img)
+            
             cf_pred = colorfulness_index(pred_img)
             cf_gt = colorfulness_index(gt_img)
             
@@ -121,7 +119,7 @@ def main():
                 "PSNR": psnr,
                 "SSIM": ssim,
                 "LPIPS": lpips_val,
-                "CIEDE2000": ciede,
+                
                 "Colorfulness_Pred": cf_pred,
                 "Colorfulness_GT": cf_gt
             })
@@ -152,7 +150,7 @@ def main():
     print(f"PSNR: {summary['PSNR']:.4f}")
     print(f"SSIM: {summary['SSIM']:.4f}")
     print(f"LPIPS: {summary['LPIPS']:.4f}")
-    print(f"CIEDE2000: {summary['CIEDE2000']:.4f}")
+    
     print(f"Colorfulness (Pred): {summary['Colorfulness_Pred']:.4f}")
     print(f"Colorfulness (GT): {summary['Colorfulness_GT']:.4f}")
     if fid_score is not None:
@@ -169,7 +167,7 @@ def main():
         f.write(f"PSNR: {summary['PSNR']:.4f}\n")
         f.write(f"SSIM: {summary['SSIM']:.4f}\n")
         f.write(f"LPIPS: {summary['LPIPS']:.4f}\n")
-        f.write(f"CIEDE2000: {summary['CIEDE2000']:.4f}\n")
+        
         f.write(f"Colorfulness (Pred): {summary['Colorfulness_Pred']:.4f}\n")
         f.write(f"Colorfulness (GT): {summary['Colorfulness_GT']:.4f}\n")
         if fid_score is not None:

@@ -1,3 +1,0 @@
-"""
-ColorizeAI Test Suite
-"""

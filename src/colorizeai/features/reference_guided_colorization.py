@@ -48,14 +48,20 @@ def apply_reference_guided_colorization(
     base_lab = rgb2lab(img_as_float(base_colorized))
     
     # Extract color palette from reference
-    ref_palette = extract_color_palette(reference_img, n_colors=8)
+    ref_palette = extract_color_palette(reference_img, n_colors=16)
     ref_palette_lab = rgb2lab(ref_palette.reshape(1, -1, 3)).reshape(-1, 3)
     
-    # Segment the grayscale image
-    segments = slic(grayscale_img, n_segments=100, compactness=10, start_label=1)
+    # Segment the image using grayscale for better edge adherence
+    # Increased n_segments for finer detail
+    # Lowered completeness to allow segments to follow image boundaries better
+    segments = slic(img_as_float(grayscale_img), n_segments=600, compactness=0.1, start_label=1)
     
     # For each segment, find the best matching color from reference palette
     guided_ab = base_lab[:, :, 1:].copy()
+    
+    # Stricter threshold to prevent bad color transfers (e.g. orange leaves to blue sky)
+    # Reduced from 2500 to 800 to be much more selective
+    dist_threshold_sq = 800
     
     for segment_id in np.unique(segments):
         mask = segments == segment_id
@@ -69,6 +75,12 @@ def apply_reference_guided_colorization(
         # Find closest color in reference palette
         distances = np.sum((ref_palette_lab - segment_color) ** 2, axis=1)
         closest_color_idx = np.argmin(distances)
+        min_dist_sq = distances[closest_color_idx]
+        
+        # Skip if color difference is too large
+        if min_dist_sq > dist_threshold_sq:
+            continue
+            
         closest_ref_color = ref_palette_lab[closest_color_idx]
         
         # Blend the ab channels
