@@ -48,8 +48,10 @@ def numpy_to_base64(img_np):
     try:
         img_np = to_uint8(img_np)
         img = Image.fromarray(img_np)
+        # Downscale for UI preview to avoid massive base64 payloads crashing network requests
+        img.thumbnail((800, 800), Image.Resampling.LANCZOS)
         buffered = io.BytesIO()
-        img.save(buffered, format="JPEG")
+        img.save(buffered, format="JPEG", quality=80)
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         return f"data:image/jpeg;base64,{img_str}"
     except Exception as e:
@@ -239,7 +241,16 @@ def handle_evaluate():
 
         if input_img_uint8 is None or gt_img_uint8 is None:
             return jsonify({'error': 'Both Input and Ground Truth images are required.'}), 400
-            
+
+        # Downscale for web evaluation to prevent proxy timeouts
+        max_dim = 800
+        h, w = input_img_uint8.shape[:2]
+        if h > max_dim or w > max_dim:
+            scale = max_dim / max(h, w)
+            new_h, new_w = int(h * scale), int(w * scale)
+            import cv2
+            input_img_uint8 = cv2.resize(input_img_uint8, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        
         import skimage.transform
         if gt_img_uint8.shape[:2] != input_img_uint8.shape[:2]:
             gt_img_uint8 = skimage.transform.resize(

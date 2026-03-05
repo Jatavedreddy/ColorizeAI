@@ -39,7 +39,10 @@ if _ddcolor_project_path.exists():
 try:
     from basicsr.archs.ddcolor_arch import DDColor as DDColorArch
     _DDCOLOR_ARCH_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    import traceback
+    traceback.print_exc()
+    print(f"Warning: Failed to import basicsr. DDColor will be disabled. Error: {e}")
     _DDCOLOR_ARCH_AVAILABLE = False
     DDColorArch = None
 

@@ -43,3 +43,7 @@ pip install -r requirements.txt
 # Activate the conda environment (if using Conda)
 conda activate colorize
 ```
+
+## 🧪 4. For colab open the link : 
+https://colab.research.google.com/github/Jatavedreddy/ColorizeAI/blob/main/Colab_GPU_Deploy.ipynb
+
