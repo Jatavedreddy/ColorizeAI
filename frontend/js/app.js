@@ -217,6 +217,7 @@ document.getElementById('videoForm').addEventListener('submit', async (e) => {
     
     const fileInput = document.getElementById('videoInput').files[0];
     const useTemporal = document.getElementById('videoTemporal').checked;
+    const skipFrames = document.getElementById('videoSkipFrames').value;
     const strength = 1.0; 
     const useDDColor = true;
 
@@ -231,6 +232,7 @@ document.getElementById('videoForm').addEventListener('submit', async (e) => {
         const formData = new FormData();
         formData.append('video_file', fileInput);
         formData.append('use_temporal', useTemporal);
+        formData.append('skip_frames', skipFrames);
         formData.append('strength', strength);
         formData.append('use_ddcolor', useDDColor);
 

@@ -188,6 +188,15 @@
                                     <input class="form-check-input" type="checkbox" id="videoTemporal" checked>
                                     <label class="form-check-label fw-bold" for="videoTemporal">Use Temporal Consistency</label>
                                 </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Speed / Quality</label>
+                                    <select class="form-select" id="videoSkipFrames">
+                                        <option value="1">High Quality (Process Every Frame)</option>
+                                        <option value="2">Balanced (Process every 2nd Frame)</option>
+                                        <option value="4">Fast (Process every 4th Frame)</option>
+                                        <option value="8">Ultra Fast (Process every 8th Frame)</option>
+                                    </select>
+                                </div>
                                 <button type="submit" class="btn btn-danger w-100" id="videoSubmitBtn">Colorize Video</button>
                             </form>
                         </div>

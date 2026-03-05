@@ -45,5 +45,7 @@ conda activate colorize
 ```
 
 ## 🧪 4. For colab open the link : 
+first push to github then open the link given below : 
+
 https://colab.research.google.com/github/Jatavedreddy/ColorizeAI/blob/main/Colab_GPU_Deploy.ipynb
 

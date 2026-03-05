@@ -180,6 +180,7 @@ def colorize_video():
         strength = float(request.form.get('strength', 1.0))
         use_ddcolor = request.form.get('use_ddcolor', 'true') == 'true'
         use_temporal = request.form.get('use_temporal', 'true') == 'true'
+        skip_frames = int(request.form.get('skip_frames', 1))
         
         temp_dir = tempfile.mkdtemp()
         in_path = os.path.join(temp_dir, 'input.mp4')
@@ -197,23 +198,44 @@ def colorize_video():
         
         temporal_engine = TemporalConsistencyEngine() if use_temporal else None
         frame_idx = 0
+        last_colored_lab = None
         
+        from skimage.color import rgb2lab, lab2rgb
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret: break
             
-            frame_idx += 1
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            _, colored = colorize_highres(frame_rgb, strength, use_ddcolor=use_ddcolor)
             
+            if frame_idx % skip_frames == 0 or last_colored_lab is None:
+                # Fully colorize frame
+                _, colored = colorize_highres(frame_rgb, strength, use_ddcolor=use_ddcolor)
+                
+                # Cache the ab channels via Lab space for skipped frames
+                colored_uint8 = to_uint8(colored)
+                last_colored_lab = cv2.cvtColor(colored_uint8, cv2.COLOR_RGB2LAB)
+            else:
+                # Fast path: Mix current grayscale with previous frame's color
+                curr_lab = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2LAB)
+                # Take L from current frame, A and B from previous frame
+                curr_lab[:,:,1:] = last_colored_lab[:,:,1:]
+                colored_uint8 = cv2.cvtColor(curr_lab, cv2.COLOR_LAB2RGB)
+                colored = colored_uint8.astype(np.float64) / 255.0
+
             if use_temporal and temporal_engine:
                 gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
                 colored = temporal_engine.apply_temporal_consistency(colored, gray)
-                
+                # Update cached lab if temporal consistency changes it significantly!
+                if skip_frames > 1:
+                     colored_uint8 = to_uint8(colored)
+                     last_colored_lab = cv2.cvtColor(colored_uint8, cv2.COLOR_RGB2LAB)
+
             colored_uint8 = to_uint8(colored)
             colored_bgr = cv2.cvtColor(colored_uint8, cv2.COLOR_RGB2BGR)
             out.write(colored_bgr)
             
+            frame_idx += 1
             if frame_idx > 300: break # soft limit for web
             
         cap.release()
