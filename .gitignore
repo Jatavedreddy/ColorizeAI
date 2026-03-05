@@ -55,10 +55,6 @@ venv.bak/
 # OS generated files
 .DS_Store
 .DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
 # IDE files
@@ -67,22 +63,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# Gradio flagged content
-flagged/
-
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
-
-# Personal workspace files
-.azure/
-outputs/
-test_*.py
-demo_*.py
-experiment_*.py
 
 
+keys.txt
 
 test_images/
+
+
