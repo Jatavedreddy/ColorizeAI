@@ -190,9 +190,18 @@ def colorize_video():
         cap = cv2.VideoCapture(in_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps == 0.0 or np.isnan(fps): fps = 30.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        width_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height_orig = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
+        # Aggressive downscaling for video to prevent localtunnel 504 timeouts
+        max_video_dim = 480 
+        if max(width_orig, height_orig) > max_video_dim:
+            scale = max_video_dim / max(width_orig, height_orig)
+            width = int(width_orig * scale)
+            height = int(height_orig * scale)
+        else:
+            width, height = width_orig, height_orig
+            
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(out_path, fourcc, int(fps), (width, height))
         
@@ -205,6 +214,10 @@ def colorize_video():
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret: break
+
+            # Resize frame to target dimensions
+            if width != width_orig or height != height_orig:
+                frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
             
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
