@@ -39,7 +39,7 @@ flagged/
 # Model weights (if large)
 *.pth
 *.pt
-models/
+/models/
 
 
 # Environments
