@@ -1,4 +1,4 @@
-const API_URL = 'http://127.0.0.1:8080/api';
+const API_URL = window.location.origin + '/api';
 
 // Sliders UI sync
 document.getElementById('basicStrength').addEventListener('input', e => {
