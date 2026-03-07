@@ -1,282 +1,227 @@
 #!/usr/bin/env python3
 """
-Validation Script: Compare Fusion, DDColor, ECCV16, Siggraph17 on First 500 Images
+Validate ECCV16, SIGGRAPH17, DDColor, and Fusion on the current dataset.
 
-This script:
-1. Selects the first 500 images (numerically sorted) from test_images/color.
-2. Deletes the remaining images from test_images/color and test_images/gray.
-3. Validates the 4 models on these 500 images.
-4. Computes mean metrics: PSNR, SSIM, LPIPS, Colorfulness.
-5. Saves results incrementally to outputs/validation_500/validation_results.csv.
+This script is intentionally non-destructive.
+
+It:
+1. Uses the images already present in `test_images/color`.
+2. Uses matching grayscale inputs from `test_images/gray` when available.
+3. Falls back to generating grayscale from the ground-truth color image otherwise.
+4. Evaluates ECCV16, SIGGRAPH17, DDColor, and Fusion.
+5. Streams per-image results to `outputs/validation_500/validation_results.csv`.
+6. Writes summary statistics to `outputs/validation_500/validation_summary.csv`.
 """
 
+from __future__ import annotations
+
+import argparse
+import csv
 import sys
-import os
-import shutil
 from pathlib import Path
+
+import cv2
+import numpy as np
+import pandas as pd
+from skimage.color import rgb2gray
+from tqdm import tqdm
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import cv2
-import torch
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-from skimage.color import rgb2lab, lab2rgb, rgb2gray
-
-from colorizeai.core.models import get_models
-from colorizeai.core.ddcolor_model import predict_ab_with_ddcolor, is_ddcolor_available
+from colorizeai.core.colorization import colorize_highres
+from colorizeai.core.ddcolor_model import is_ddcolor_available, predict_ab_with_ddcolor
 from colorizeai.features.smart_model_fusion import ensemble_colorization
-from colorizeai.utils.metrics import colorfulness_index, compute_metrics, compute_lpips
+from colorizeai.utils.metrics import colorfulness_index, compute_lpips, compute_metrics
 
-def ensure_dir(path):
-    Path(path).mkdir(parents=True, exist_ok=True)
 
-def load_image(path):
-    """Load image as RGB float [0, 1]"""
-    path_str = str(path)
-    if not os.path.exists(path_str):
-        return None
-    img = cv2.imread(path_str)
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+
+
+def ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def sort_key(path: Path):
+    try:
+        return (0, int(path.stem))
+    except ValueError:
+        return (1, path.stem.lower())
+
+
+def load_rgb_float(path: Path) -> np.ndarray | None:
+    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if img is None:
         return None
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img.astype(np.float32) / 255.0
 
-def _predict_ab_classic(model, img_rgb, device):
-    """Deep copy of classic model prediction logic."""
-    h, w = img_rgb.shape[:2]
-    # Resize to 256x256 for model
-    img_small = cv2.resize(img_rgb, (256, 256))
-    img_lab = rgb2lab(img_small)
-    img_l = img_lab[:, :, 0]
-    
-    tens = torch.from_numpy(img_l).unsqueeze(0).unsqueeze(0).float().to(device)
-    
-    with torch.no_grad():
-        out_ab = model(tens)
-        
-    ab = out_ab.squeeze(0).permute(1, 2, 0).cpu().numpy()
-    ab_up = cv2.resize(ab, (w, h))
-    
-    # Combine with original L (from original image to keep sharpness)
-    img_lab_orig = rgb2lab(img_rgb)
-    img_lab_out = np.zeros_like(img_lab_orig)
-    img_lab_out[:, :, 0] = img_lab_orig[:, :, 0]
-    img_lab_out[:, :, 1:] = ab_up
-    
-    return np.clip(lab2rgb(img_lab_out), 0, 1)
 
-def cleanup_dataset(color_dir, gray_dir, limit=500):
-    """
-    Keeps only the first `limit` images (numerically sorted).
-    Deletes the rest.
-    """
-    print(f"Cleaning up dataset to keep first {limit} images...")
-    
-    # Get all regular files
-    color_files = [f for f in color_dir.iterdir() if f.is_file() and f.suffix.lower() in ['.jpg', '.png', '.jpeg']]
-    
-    # Sort numerically
-    def sort_key(f):
-        try:
-            return int(f.stem)
-        except ValueError:
-            return f.stem
+def to_three_channel_gray(gray_or_rgb: np.ndarray) -> np.ndarray:
+    if gray_or_rgb.ndim == 2:
+        return np.stack([gray_or_rgb] * 3, axis=-1)
+    if gray_or_rgb.ndim == 3 and gray_or_rgb.shape[2] == 1:
+        return np.concatenate([gray_or_rgb] * 3, axis=-1)
+    return gray_or_rgb
 
-    color_files.sort(key=sort_key)
 
-    files_to_keep = color_files[:limit]
-    files_to_delete = color_files[limit:]
+def resolve_gray_input(gt_rgb: np.ndarray, gray_path: Path | None) -> np.ndarray:
+    if gray_path is not None and gray_path.exists():
+        gray_img = load_rgb_float(gray_path)
+        if gray_img is not None:
+            return to_three_channel_gray(gray_img)
 
-    print(f"Found {len(color_files)} images. Keeping {len(files_to_keep)}, deleting {len(files_to_delete)}.")
+    gray_2d = rgb2gray(gt_rgb).astype(np.float32)
+    return np.stack([gray_2d] * 3, axis=-1)
 
-    # Delete excess color files
-    for f in files_to_delete:
-        try:
-            f.unlink()
-        except Exception as e:
-            print(f"Error deleting {f}: {e}")
 
-    # Delete excess gray files (match by name)
-    if gray_dir.exists():
-        gray_files = [f for f in gray_dir.iterdir() if f.is_file()]
-        names_to_keep = set(f.name for f in files_to_keep)
-        
-        deleted_gray_count = 0
-        for f in gray_files:
-            if f.name not in names_to_keep and f.suffix.lower() in ['.jpg', '.png', '.jpeg']:
-                try:
-                    f.unlink()
-                    deleted_gray_count += 1
-                except Exception as e:
-                    print(f"Error deleting gray file {f}: {e}")
-        print(f"Deleted {deleted_gray_count} corresponding gray images.")
-    
-    return files_to_keep
+def collect_image_paths(color_dir: Path, max_images: int) -> list[Path]:
+    paths = [path for path in color_dir.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS]
+    paths.sort(key=sort_key)
+    return paths[:max_images]
 
-def main():
-    # --- Configuration ---
-    PROJECT_ROOT = Path(__file__).parent.parent.absolute()
-    COLOR_DIR = PROJECT_ROOT / "test_images" / "color"
-    GRAY_DIR = PROJECT_ROOT / "test_images" / "gray"
-    OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "validation_500"
-    ensure_dir(OUTPUT_ROOT)
 
-    if not COLOR_DIR.exists():
-        print(f"Error: {COLOR_DIR} not found.")
+def evaluate_predictions(gt_rgb: np.ndarray, predictions: dict[str, np.ndarray | None]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+
+    for model_name, pred_img in predictions.items():
+        if pred_img is None:
+            continue
+
+        if pred_img.shape != gt_rgb.shape:
+            pred_img = cv2.resize(pred_img, (gt_rgb.shape[1], gt_rgb.shape[0]))
+
+        pred_img = np.clip(pred_img.astype(np.float32), 0.0, 1.0)
+        psnr_val, ssim_val = compute_metrics(gt_rgb, pred_img)
+        lpips_val = compute_lpips(gt_rgb, pred_img)
+        colorfulness_val = colorfulness_index(pred_img)
+
+        rows.append(
+            {
+                "model": model_name,
+                "psnr": float(psnr_val),
+                "ssim": float(ssim_val),
+                "lpips": float(lpips_val) if lpips_val is not None else np.nan,
+                "colorfulness": float(colorfulness_val) if colorfulness_val is not None else np.nan,
+            }
+        )
+
+    return rows
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Validate colorization models on the current image set")
+    parser.add_argument("--max-images", type=int, default=500, help="Maximum number of images to evaluate")
+    parser.add_argument(
+        "--color-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "test_images" / "color",
+        help="Directory containing color ground-truth images",
+    )
+    parser.add_argument(
+        "--gray-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "test_images" / "gray",
+        help="Directory containing grayscale input images",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "outputs" / "validation_500",
+        help="Directory to write validation results",
+    )
+    args = parser.parse_args()
+
+    ensure_dir(args.output_dir)
+
+    if not args.color_dir.exists():
+        print(f"Error: color directory not found: {args.color_dir}")
         return
 
-    # --- Dataset Cleanup ---
-    image_paths = cleanup_dataset(COLOR_DIR, GRAY_DIR, limit=500)
-    
+    image_paths = collect_image_paths(args.color_dir, args.max_images)
     if not image_paths:
         print("No images found to process.")
         return
 
-    # --- Load Models ---
-    print("Loading models...")
-    try:
-        (eccv16_model, siggraph17_model), device = get_models()
-    except Exception as e:
-        print(f"Error loading classic models: {e}")
-        return
-
     has_ddcolor = is_ddcolor_available()
+    print(f"Found {len(image_paths)} images to evaluate.")
+    print(f"Using grayscale directory: {args.gray_dir if args.gray_dir.exists() else 'generated from ground truth'}")
     print(f"DDColor available: {has_ddcolor}")
 
-    # --- Prepare Output File ---
-    csv_path = OUTPUT_ROOT / "validation_results.csv"
-    
-    # Define columns
-    columns = ["image", "model", "psnr", "ssim", "lpips", "colorfulness"]
-    
-    # Write header
-    with open(csv_path, 'w') as f:
-        f.write(",".join(columns) + "\n")
+    csv_path = args.output_dir / "validation_results.csv"
+    summary_path = args.output_dir / "validation_summary.csv"
 
-    print(f"Starting validation on {len(image_paths)} images...")
-    print(f"Results will be streamed to {csv_path}")
+    with open(csv_path, "w", newline="") as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=["image", "model", "psnr", "ssim", "lpips", "colorfulness"],
+        )
+        writer.writeheader()
 
-    pbar = tqdm(image_paths)
-    for img_path in pbar:
-        img_name = img_path.name
-        
-        # Load Ground Truth
-        gt_rgb = load_image(img_path)
-        if gt_rgb is None:
-            continue
-            
-        # Create Input Grayscale (uint8 for Fusion input)
-        gray_img_2d_float = rgb2gray(gt_rgb) # 0-1
-        gray_img_uint8 = (gray_img_2d_float * 255).astype(np.uint8)
-        
-        # ----------------- Run Models -----------------
-        predictions = {}
-        
-        # Store raw outputs for Fusion
-        out_eccv16 = None
-        out_siggraph17 = None
-        out_ddcolor_rgb = None
-
-        # 1. ECCV16
-        try:
-            out_eccv16 = _predict_ab_classic(eccv16_model, gt_rgb, device)
-            predictions['eccv16'] = out_eccv16
-        except Exception:
-            pass
-
-        # 2. SIGGRAPH17
-        try:
-            out_siggraph17 = _predict_ab_classic(siggraph17_model, gt_rgb, device)
-            predictions['siggraph17'] = out_siggraph17
-        except Exception:
-            pass
-
-        # 3. DDColor
-        predictions['ddcolor'] = None
-        if has_ddcolor:
-            try:
-                # DDColor expects BGR uint8
-                gt_bgr_uint8 = (cv2.cvtColor(gt_rgb, cv2.COLOR_RGB2BGR) * 255).astype(np.uint8)
-                dd_out_bgr = predict_ab_with_ddcolor(gt_bgr_uint8)
-                
-                if dd_out_bgr is not None:
-                    # Convert to RGB uint8 for Fusion
-                    out_ddcolor_rgb = cv2.cvtColor(dd_out_bgr, cv2.COLOR_BGR2RGB)
-                    # Convert to RGB float for Metrics
-                    predictions['ddcolor'] = out_ddcolor_rgb.astype(np.float32) / 255.0
-            except Exception:
-                pass
-
-        # 4. Fusion
-        predictions['fusion'] = None
-        # Only run fusion if we have the components
-        if out_eccv16 is not None and out_siggraph17 is not None:
-            try:
-                fusion_res_rgb, _, _ = ensemble_colorization(
-                    gray_img_uint8, 
-                    out_eccv16, 
-                    out_siggraph17, 
-                    ddcolor_result=out_ddcolor_rgb # Passing RGB uint8
-                )
-                predictions['fusion'] = fusion_res_rgb
-            except Exception as e:
-                # print(f"Fusion fail: {e}")
-                pass
-
-        # ----------------- Compute Metrics & Write Row -----------------
-        for model_name, pred_img in predictions.items():
-            if pred_img is None:
+        for img_path in tqdm(image_paths, desc="Validating models"):
+            gt_rgb = load_rgb_float(img_path)
+            if gt_rgb is None:
                 continue
-                
-            # Resize pred if needed
-            if pred_img.shape != gt_rgb.shape:
-                pred_img = cv2.resize(pred_img, (gt_rgb.shape[1], gt_rgb.shape[0]))
 
-            psnr_val, ssim_val = compute_metrics(gt_rgb, pred_img)
-            
-            # LPIPS
+            gray_path = args.gray_dir / img_path.name if args.gray_dir.exists() else None
+            gray_rgb = resolve_gray_input(gt_rgb, gray_path)
+            gray_uint8 = (rgb2gray(gray_rgb) * 255.0).astype(np.uint8)
+
+            predictions: dict[str, np.ndarray | None] = {
+                "eccv16": None,
+                "siggraph17": None,
+                "ddcolor": None,
+                "fusion": None,
+            }
+
             try:
-                lpips_val = compute_lpips(gt_rgb, pred_img)
-                if hasattr(lpips_val, 'item'):
-                    lpips_val = lpips_val.item()
-            except:
-                lpips_val = ""
-            
-            # Colorfulness
-            try:
-                cf_val = colorfulness_index(pred_img)
-            except:
-                cf_val = ""
+                eccv_pred, siggraph_pred = colorize_highres(gray_rgb, strength=1.0, use_ddcolor=False)
+                predictions["eccv16"] = eccv_pred.astype(np.float32)
+                predictions["siggraph17"] = siggraph_pred.astype(np.float32)
+            except Exception as exc:
+                print(f"Warning: classic model inference failed for {img_path.name}: {exc}")
 
-            # Write row immediately
-            with open(csv_path, 'a') as f:
-                vals = [
-                    img_name,
-                    model_name,
-                    f"{psnr_val:.4f}",
-                    f"{ssim_val:.4f}",
-                    f"{lpips_val:.4f}" if isinstance(lpips_val, float) else str(lpips_val),
-                    f"{cf_val:.4f}" if isinstance(cf_val, float) else str(cf_val)
-                ]
-                f.write(",".join(vals) + "\n")
+            ddcolor_pred: np.ndarray | None = None
+            if has_ddcolor:
+                try:
+                    gray_bgr_uint8 = cv2.cvtColor((gray_rgb * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+                    dd_out_bgr = predict_ab_with_ddcolor(gray_bgr_uint8, input_size=512, model_size="large")
+                    if dd_out_bgr is not None:
+                        ddcolor_pred = cv2.cvtColor(dd_out_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                        predictions["ddcolor"] = ddcolor_pred
+                except Exception as exc:
+                    print(f"Warning: DDColor inference failed for {img_path.name}: {exc}")
 
-    # --- Final Summary ---
-    try:
-        print("\nComputing summary statistics...")
-        df = pd.read_csv(csv_path)
-        if not df.empty:
-            summary = df.groupby("model").mean(numeric_only=True)
-            print("\n--- Validation Summary (Mean Metrics) ---")
-            print(summary)
-            
-            summary_path = OUTPUT_ROOT / "validation_summary.csv"
-            summary.to_csv(summary_path)
-            print(f"Summary saved to {summary_path}")
-    except Exception as e:
-        print(f"Error computing summary: {e}")
+            if predictions["eccv16"] is not None and predictions["siggraph17"] is not None:
+                try:
+                    fused_pred, _, _ = ensemble_colorization(
+                        gray_uint8,
+                        predictions["eccv16"],
+                        predictions["siggraph17"],
+                        ddcolor_result=ddcolor_pred,
+                    )
+                    predictions["fusion"] = fused_pred.astype(np.float32)
+                except Exception as exc:
+                    print(f"Warning: fusion failed for {img_path.name}: {exc}")
+
+            rows = evaluate_predictions(gt_rgb, predictions)
+            for row in rows:
+                row["image"] = img_path.name
+                writer.writerow(row)
+
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        print("No valid results were generated.")
+        return
+
+    summary = df.groupby("model")[["psnr", "ssim", "lpips", "colorfulness"]].mean(numeric_only=True)
+    summary.to_csv(summary_path)
+
+    print("\n--- Validation Summary (Mean Metrics) ---")
+    print(summary)
+    print(f"\nDetailed results saved to {csv_path}")
+    print(f"Summary saved to {summary_path}")
+
 
 if __name__ == "__main__":
     main()
