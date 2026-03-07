@@ -166,3 +166,5 @@ def siggraph17(pretrained=True):
         model.load_state_dict(hub.load_state_dict_from_url('https://colorizers.s3.us-east-2.amazonaws.com/siggraph17-df00044c.pth',map_location='cpu',check_hash=True))
     return model
 
+
+# the SIGGRAPHGenerator is a more complex model that takes in both the L channel and the AB channels as input, along with an optional mask. It has a U-Net like architecture with skip connections from the encoder to the decoder. The model outputs both a classification output (for the quantized color bins) and a regression output (for the continuous AB values). The pretrained weights for this model are available on the original authors' website, and can be loaded using torch.hub.

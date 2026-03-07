@@ -43,13 +43,13 @@ def download_ddcolor_weights(model_size: str = 'large'):
         model_size: 'tiny' or 'large'
     """
     # Determine project root
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent
+    script_dir = Path(__file__).parent # this will be src/tools
+    project_root = script_dir.parent # this will be src/
     
     # Target location in DDColor project folder
-    ddcolor_project = project_root / "DDColor"
-    weights_dir = ddcolor_project / "modelscope" / "damo" / "cv_ddcolor_image-colorization"
-    weights_file = weights_dir / "pytorch_model.pt"
+    ddcolor_project = project_root / "DDColor" # this is the root of the DDColor project, where the weights should be placed according to their instructions
+    weights_dir = ddcolor_project / "modelscope" / "damo" / "cv_ddcolor_image-colorization" # this is the specific path where the weights should be placed according to DDColor's instructions
+    weights_file = weights_dir / "pytorch_model.pt" # this is the specific filename that DDColor expects for the weights
     
     # Alternative: also save to ColorizeAI weights folder
     alt_weights_dir = project_root / "weights"
