@@ -10,22 +10,38 @@
 </head>
 <body class="bg-light">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="#">🎨 ColorizeAI UI</a>
-    </div>
-</nav>
+<div id="scroll-wrapper">
+    <section id="hero-sticky">
+        <nav class="top-nav">
+            <h2 class="m-0">
+                <a href="#" class="navbar-logo"><span class="logo-text-white">Colorize</span><span class="logo-text-gradient">AI</span></a>
+            </h2>
+            <a href="https://github.com/Jatavedreddy/ColorizeAI" target="_blank" class="github-btn">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                Star on GitHub
+            </a>
+        </nav>
+        <img id="hero-bw" src="https://picsum.photos/id/1015/1920/1080?grayscale" alt="B&W Image">
+        <img id="hero-color" src="https://picsum.photos/id/1015/1920/1080" alt="Color Image">
+        <div class="hero-text text-white text-center position-absolute top-50 start-50 translate-middle w-100" style="z-index: 10; pointer-events: none;">
+            <h1 class="display-3 fw-bold" style="text-shadow: 0px 4px 10px rgba(0,0,0,0.5);">ColorizeAI</h1>
+            <p class="fs-4" style="text-shadow: 0px 4px 10px rgba(0,0,0,0.5);">Bring history to life</p>
+        </div>
+    </section>
+</div>
 
-<div class="container pb-5">
-    <div class="row">
+<div id="app-background-wrapper">
+    <canvas id="pixel-canvas"></canvas>
+
+    <section id="app-workspace" class="container pb-5">
+        <div class="row">
         <div class="col-12">
             <!-- Tabs -->
             <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab" aria-controls="basic" aria-selected="true">Quick Colorize</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="advanced-tab" data-bs-toggle="tab" data-bs-target="#advanced" type="button" role="tab" aria-controls="advanced" aria-selected="false">Advanced/Enhanced</button>
+                                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button" role="tab" aria-controls="single" aria-selected="true">Single Image</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch" type="button" role="tab" aria-controls="batch" aria-selected="false">Batch Processing</button>
@@ -39,108 +55,68 @@
             </ul>
 
             <!-- Tab Contents -->
-            <div class="tab-content bg-white p-4 border border-top-0 rounded-bottom shadow-sm" id="mainTabsContent">
+            <div class="tab-content pt-2" id="mainTabsContent">
                 
-                <!-- Basic Colorize Tab -->
-                <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
+                                <!-- Single Image Processing Tab -->
+                <div class="tab-pane fade show active" id="single" role="tabpanel" aria-labelledby="single-tab">
                     <div class="row">
                         <div class="col-md-4">
-                            <form id="basicForm">
+                            <form id="singleForm">
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Select B&W Image</label>
-                                    <input class="form-control" type="file" id="basicInputImg" accept="image/*" required>
+                                    <input class="form-control" type="file" id="singleInputImg" accept="image/*" required>
                                 </div>
+                                <div class="mb-3 border p-3 rounded bg-light">
+                                    <h6 class="fw-bold mb-3 text-muted">Advanced Options</h6>
+                                    <div class="mb-2">
+                                        <label class="form-label fw-bold fs-7">Reference Image (Optional)</label>
+                                        <input class="form-control form-control-sm" type="file" id="singleRefImg" accept="image/*">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label fw-bold fs-7">Preset Style</label>
+                                        <select class="form-select form-select-sm" id="singleStyle">
+                                            <option value="none" selected>None</option>
+                                            <option value="vintage">Vintage</option>
+                                            <option value="vibrant">Vibrant / Cinematic</option>
+                                            <option value="natural">Natural</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" id="singleUseEnsemble" checked>
+                                        <label class="form-check-label fs-7" for="singleUseEnsemble">Use Model Ensemble Fusion</label>
+                                    </div>
+                                </div>
+
                                 <div class="mb-3">
-                                    <label class="form-label fw-bold">Colorization Strength: <span id="basicStrengthVal">1.0</span></label>
-                                    <input type="range" class="form-range" id="basicStrength" min="0" max="2" step="0.1" value="1.0">
+                                    <label class="form-label fw-bold">Colorization Strength: <span id="singleStrengthVal">1.0</span></label>
+                                    <input type="range" class="form-range" id="singleStrength" min="0" max="2" step="0.1" value="1.0">
                                 </div>
                                 <div class="form-check form-switch mb-3">
-                                    <input class="form-check-input" type="checkbox" id="basicUseDDColor" checked>
-                                    <label class="form-check-label fw-bold" for="basicUseDDColor">Use DDColor (Recommended)</label>
+                                    <input class="form-check-input" type="checkbox" id="singleUseDDColor" checked>
+                                    <label class="form-check-label fw-bold" for="singleUseDDColor">Use DDColor (Recommended)</label>
                                 </div>
-                                <button type="submit" class="btn btn-primary w-100" id="basicSubmitBtn">Colorize Image</button>
+                                
+                                <button type="submit" class="btn btn-primary w-100" id="singleSubmitBtn">Colorize Image</button>
                             </form>
                         </div>
-                        <div class="col-md-8 text-center" id="basicOutputArea">
+                        <div class="col-md-8 text-center" id="singleOutputArea">
                             <h5 class="custom-header">Results</h5>
-                            <div class="text-muted" id="basicStatus">Upload an image and click Colorize...</div>
-                            <div class="spinner-border text-primary my-4" role="status" id="basicSpinner" style="display:none;"></div>
-                            <div class="row mt-3" id="basicResults" style="display:none;">
-                                <div class="col-md-6 mb-3">
-                                    <h6>Primary Model Output</h6>
-                                    <div class="output-container border rounded">
-                                        <img id="basicPrimaryImg" src="" class="img-fluid rounded">
-                                    </div>
-                                    <a id="basicPrimaryDownload" href="#" download="colorized_primary.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h6>ECCV16 Output</h6>
-                                    <div class="output-container border rounded">
-                                        <img id="basicEccvImg" src="" class="img-fluid rounded">
-                                    </div>
-                                    <a id="basicEccvDownload" href="#" download="colorized_eccv.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Advanced/Enhanced Tab -->
-                <div class="tab-pane fade" id="advanced" role="tabpanel" aria-labelledby="advanced-tab">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <form id="enhancedForm">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Select B&W Image</label>
-                                    <input class="form-control" type="file" id="enhancedInputImg" accept="image/*" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Reference Image (Optional)</label>
-                                    <input class="form-control" type="file" id="enhancedRefImg" accept="image/*">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Preset Style</label>
-                                    <select class="form-select" id="enhancedStyle">
-                                        <option value="none" selected>None</option>
-                                        <option value="vintage">Vintage</option>
-                                        <option value="vibrant">Vibrant / Cinematic</option>
-                                        <option value="natural">Natural</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Colorization Strength: <span id="enhancedStrengthVal">1.0</span></label>
-                                    <input type="range" class="form-range" id="enhancedStrength" min="0" max="2" step="0.1" value="1.0">
-                                </div>
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" id="enhancedUseDDColor" checked>
-                                    <label class="form-check-label" for="enhancedUseDDColor">Use DDColor</label>
-                                </div>
-                                <div class="form-check form-switch mb-3">
-                                    <input class="form-check-input" type="checkbox" id="enhancedUseEnsemble" checked>
-                                    <label class="form-check-label" for="enhancedUseEnsemble">Use Model Ensemble Fusion</label>
-                                </div>
-
-                                <button type="submit" class="btn btn-success w-100" id="enhancedSubmitBtn">Enhanced Colorization</button>
-                            </form>
-                        </div>
-                        <div class="col-md-8 text-center" id="enhancedOutputArea">
-                            <h5 class="custom-header">Enhanced Results</h5>
-                            <div class="text-muted" id="enhancedStatus">Upload images and click Colorize...</div>
-                            <div class="spinner-border text-success my-4" role="status" id="enhancedSpinner" style="display:none;"></div>
-                            <div class="row mt-3" id="enhancedResults" style="display:none;">
+                            <div class="text-muted" id="singleStatus">Upload an image and click Colorize...</div>
+                            <div class="pixel-loader-container" id="singleSpinner" style="display:none;"><div class="pixel-loader-text">Colorizing...</div><div class="pixel-loader-track"><div class="pixel-loader-fill"></div></div></div>
+                            <div class="row mt-3" id="singleResults" style="display:none;">
                                 <div class="col-md-6 mb-3">
                                     <h6>✨ Enhanced Output</h6>
                                     <div class="output-container border rounded">
-                                        <img id="enhancedPrimaryImg" src="" class="img-fluid rounded">
+                                        <img id="singlePrimaryImg" src="" class="img-fluid rounded">
                                     </div>
-                                    <a id="enhancedPrimaryDownload" href="#" download="enhanced_primary.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
+                                    <a id="singlePrimaryDownload" href="#" download="enhanced_primary.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <h6>Standard Output</h6>
                                     <div class="output-container border rounded">
-                                        <img id="enhancedEccvImg" src="" class="img-fluid rounded">
+                                        <img id="singleEccvImg" src="" class="img-fluid rounded">
                                     </div>
-                                    <a id="enhancedEccvDownload" href="#" download="enhanced_eccv.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
+                                    <a id="singleEccvDownload" href="#" download="enhanced_eccv.jpg" class="btn btn-sm btn-outline-secondary mt-2">Download</a>
                                 </div>
                             </div>
                         </div>
@@ -166,7 +142,7 @@
                         <div class="col-md-8 text-center">
                             <h5 class="custom-header">Batch Output</h5>
                             <div class="text-muted" id="batchStatus">Upload multiple images and download them as a zip.</div>
-                            <div class="spinner-border text-info my-4" role="status" id="batchSpinner" style="display:none;"></div>
+                            <div class="pixel-loader-container" id="batchSpinner" style="display:none;"><div class="pixel-loader-text">Colorizing...</div><div class="pixel-loader-track"><div class="pixel-loader-fill"></div></div></div>
                             <div id="batchResults" style="display:none;" class="mt-4">
                                 <h5 class="text-success">Batch Completed!</h5>
                                 <a id="batchDownload" href="#" class="btn btn-lg btn-success mt-3">Download ZIP Archive</a>
@@ -203,7 +179,7 @@
                         <div class="col-md-8 text-center">
                             <h5 class="custom-header">Video Output</h5>
                             <div class="text-muted" id="videoStatus">Upload a video file (may take several minutes for large files).</div>
-                            <div class="spinner-border text-danger my-4" role="status" id="videoSpinner" style="display:none;"></div>
+                            <div class="pixel-loader-container" id="videoSpinner" style="display:none;"><div class="pixel-loader-text">Colorizing...</div><div class="pixel-loader-track"><div class="pixel-loader-fill"></div></div></div>
                             <div id="videoResults" style="display:none;" class="mt-4">
                                 <h5 class="text-success">Video Processed!</h5>
                                 <video id="videoPlayer" controls class="img-fluid rounded border mb-3"></video><br>
@@ -253,7 +229,7 @@
                         <div class="col-md-8 text-center">
                             <h5 class="custom-header">Evaluation Benchmarks Lab</h5>
                             <div class="text-muted" id="metricsStatus">Upload images and click Run Evaluation (Testing 6 models)...</div>
-                            <div class="spinner-border text-dark my-4" role="status" id="metricsSpinner" style="display:none;"></div>
+                            <div class="pixel-loader-container" id="metricsSpinner" style="display:none;"><div class="pixel-loader-text">Colorizing...</div><div class="pixel-loader-track"><div class="pixel-loader-fill"></div></div></div>
                             <div id="metricsResults" style="display:none;" class="mt-4 text-start">
                                 <div id="metricsTableContainer" class="table-responsive"></div>
                                 <h6 class="mt-4">Best Model Output Visualization</h6>
@@ -265,7 +241,7 @@
 
             </div>
         </div>
-    </div>
+    </section>
 </div>
 
 <!-- Bootstrap JS -->

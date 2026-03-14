@@ -1,11 +1,33 @@
 const API_URL = window.location.origin + '/api';
 
-// Sliders UI sync
-document.getElementById('basicStrength').addEventListener('input', e => {
-    document.getElementById('basicStrengthVal').innerText = e.target.value;
+// --- Scroll Reveal Hero Effect ---
+document.addEventListener('DOMContentLoaded', () => {
+    const scrollWrapper = document.getElementById('scroll-wrapper');
+    const heroColor = document.getElementById('hero-color');
+
+    if (scrollWrapper && heroColor) {
+        window.addEventListener('scroll', () => {
+            const rect = scrollWrapper.getBoundingClientRect();
+            const vh = window.innerHeight;
+            
+            // Total scrollable area inside the wrapper (wrapper height - 100vh)
+            const scrollDistance = rect.height - vh;
+            
+            // Distance scrolled past the top of the wrapper
+            const scrolled = -rect.top;
+
+            let percentage = (scrolled / scrollDistance) * 100;
+            if (percentage < 0) percentage = 0;
+            if (percentage > 100) percentage = 100;
+
+            heroColor.style.setProperty('--reveal-progress', `${percentage}%`);
+        });
+    }
 });
-document.getElementById('enhancedStrength').addEventListener('input', e => {
-    document.getElementById('enhancedStrengthVal').innerText = e.target.value;
+
+// Sliders UI sync
+document.getElementById('singleStrength').addEventListener('input', e => {
+    document.getElementById('singleStrengthVal').innerText = e.target.value;
 });
 document.getElementById('batchStrength').addEventListener('input', e => {
     document.getElementById('batchStrengthVal').innerText = e.target.value;
@@ -25,83 +47,25 @@ function getImgSrc(dataUrlOrB64) {
 
 
 // -------------------------------------------------------------
-// TAB 1: BASIC COLORIZE
+// TAB 1: SINGLE IMAGE COLORIZE
 // -------------------------------------------------------------
-document.getElementById('basicForm').addEventListener('submit', async (e) => {
+document.getElementById('singleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const fileInput = document.getElementById('basicInputImg').files[0];
-    const strength = document.getElementById('basicStrength').value;
-    const useDDColor = document.getElementById('basicUseDDColor').checked;
+    const fileInput = document.getElementById('singleInputImg').files[0];
+    const refInput = document.getElementById('singleRefImg').files[0];
+    const style = document.getElementById('singleStyle').value;
+    const strength = document.getElementById('singleStrength').value;
+    const useDDColor = document.getElementById('singleUseDDColor').checked;
+    const useEnsemble = document.getElementById('singleUseEnsemble').checked;
 
     if (!fileInput) return;
 
     // UI State
-    document.getElementById('basicStatus').style.display = 'none';
-    document.getElementById('basicSpinner').style.display = 'inline-block';
-    document.getElementById('basicResults').style.display = 'none';
-    document.getElementById('basicSubmitBtn').disabled = true;
-
-    try {
-        const formData = new FormData();
-        formData.append('input_img', fileInput);
-        formData.append('strength', strength);
-        formData.append('use_ddcolor', useDDColor);
-
-        const res = await fetch(`${API_URL}/colorize/basic`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
-
-        if (data.error) throw new Error(data.error);
-
-        // Display results
-        const primarySrc = getImgSrc(data.primary_image);
-        const eccvSrc = getImgSrc(data.eccv_image);
-
-        document.getElementById('basicPrimaryImg').src = primarySrc;
-        document.getElementById('basicPrimaryDownload').href = primarySrc;
-
-        document.getElementById('basicEccvImg').src = eccvSrc;
-        document.getElementById('basicEccvDownload').href = eccvSrc;
-
-        document.getElementById('basicResults').style.display = 'flex';
-
-    } catch (err) {
-        alert("Error executing colorization: " + err.message);
-        console.error(err);
-        document.getElementById('basicStatus').style.display = 'block';
-        document.getElementById('basicStatus').innerText = 'Colorization Failed. See console.';
-    } finally {
-        document.getElementById('basicSpinner').style.display = 'none';
-        document.getElementById('basicSubmitBtn').disabled = false;
-    }
-});
-
-
-// -------------------------------------------------------------
-// TAB 2: ADVANCED/ENHANCED COLORIZE
-// -------------------------------------------------------------
-document.getElementById('enhancedForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const fileInput = document.getElementById('enhancedInputImg').files[0];
-    const refInput = document.getElementById('enhancedRefImg').files[0];
-    const style = document.getElementById('enhancedStyle').value;
-    const strength = document.getElementById('enhancedStrength').value;
-    const useDDColor = document.getElementById('enhancedUseDDColor').checked;
-    const useEnsemble = document.getElementById('enhancedUseEnsemble').checked;
-
-    if (!fileInput) return;
-
-    // UI State
-    document.getElementById('enhancedStatus').style.display = 'none';
-    document.getElementById('enhancedSpinner').style.display = 'inline-block';
-    document.getElementById('enhancedResults').style.display = 'none';
-    document.getElementById('enhancedSubmitBtn').disabled = true;
+    document.getElementById('singleStatus').style.display = 'none';
+    document.getElementById('singleSpinner').style.display = 'flex';
+    document.getElementById('singleResults').style.display = 'none';
+    document.getElementById('singleSubmitBtn').disabled = true;
 
     try {
         const formData = new FormData();
@@ -128,28 +92,27 @@ document.getElementById('enhancedForm').addEventListener('submit', async (e) => 
         const primarySrc = getImgSrc(data.primary_image);
         const eccvSrc = getImgSrc(data.eccv_image);
 
-        document.getElementById('enhancedPrimaryImg').src = primarySrc;
-        document.getElementById('enhancedPrimaryDownload').href = primarySrc;
+        document.getElementById('singlePrimaryImg').src = primarySrc;
+        document.getElementById('singlePrimaryDownload').href = primarySrc;
 
-        document.getElementById('enhancedEccvImg').src = eccvSrc;
-        document.getElementById('enhancedEccvDownload').href = eccvSrc;
+        document.getElementById('singleEccvImg').src = eccvSrc;
+        document.getElementById('singleEccvDownload').href = eccvSrc;
 
-        document.getElementById('enhancedResults').style.display = 'flex';
+        document.getElementById('singleResults').style.display = 'flex';
 
     } catch (err) {
-        alert("Error executing enhanced colorization: " + err.message);
+        alert("Error executing colorization: " + err.message);
         console.error(err);
-        document.getElementById('enhancedStatus').style.display = 'block';
-        document.getElementById('enhancedStatus').innerText = 'Colorization Failed. See console.';
+        document.getElementById('singleStatus').style.display = 'block';
+        document.getElementById('singleStatus').innerText = 'Colorization Failed. See console.';
     } finally {
-        document.getElementById('enhancedSpinner').style.display = 'none';
-        document.getElementById('enhancedSubmitBtn').disabled = false;
+        document.getElementById('singleSpinner').style.display = 'none';
+        document.getElementById('singleSubmitBtn').disabled = false;
     }
 });
 
-
 // -------------------------------------------------------------
-// TAB 3: BATCH PROCESSING
+// TAB 2: BATCH PROCESSING
 // -------------------------------------------------------------
 document.getElementById('batchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -162,7 +125,7 @@ document.getElementById('batchForm').addEventListener('submit', async (e) => {
 
     // UI state
     document.getElementById('batchStatus').style.display = 'none';
-    document.getElementById('batchSpinner').style.display = 'inline-block';
+    document.getElementById('batchSpinner').style.display = 'flex';
     document.getElementById('batchResults').style.display = 'none';
     document.getElementById('batchSubmitBtn').disabled = true;
 
@@ -224,7 +187,7 @@ document.getElementById('videoForm').addEventListener('submit', async (e) => {
     if (!fileInput) return;
 
     document.getElementById('videoStatus').style.display = 'none';
-    document.getElementById('videoSpinner').style.display = 'inline-block';
+    document.getElementById('videoSpinner').style.display = 'flex';
     document.getElementById('videoResults').style.display = 'none';
     document.getElementById('videoSubmitBtn').disabled = true;
 
@@ -292,7 +255,7 @@ document.getElementById('metricsForm').addEventListener('submit', async (e) => {
     if (!bwInput || !gtInput) return;
 
     document.getElementById('metricsStatus').style.display = 'none';
-    document.getElementById('metricsSpinner').style.display = 'inline-block';
+    document.getElementById('metricsSpinner').style.display = 'flex';
     document.getElementById('metricsResults').style.display = 'none';
     document.getElementById('metricsSubmitBtn').disabled = true;
 
@@ -334,4 +297,73 @@ document.getElementById('metricsForm').addEventListener('submit', async (e) => {
         document.getElementById('metricsSpinner').style.display = 'none';
         document.getElementById('metricsSubmitBtn').disabled = false;
     }
+});
+
+// --- Pixel Canvas Background Animation ---
+document.addEventListener("DOMContentLoaded", function() {
+    const canvas = document.getElementById("pixel-canvas");
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext("2d");
+    let particles = [];
+    
+    function resizeCanvas() {
+        const parent = document.getElementById("app-background-wrapper");
+        if (parent) {
+            canvas.width = parent.offsetWidth;
+            canvas.height = parent.offsetHeight;
+        } else {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+    }
+    
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    class Particle {
+        constructor() {
+            this.reset();
+            // Start spread across the screen
+            this.x = Math.random() * canvas.width;
+        }
+
+        reset() {
+            this.x = Math.random() * 100; // spawn on left side randomly
+            this.y = Math.random() * canvas.height;
+            this.size = Math.random() * 4 + 2; // medium pixels 2px to 6px
+            this.speedX = Math.random() * 2 + 0.5; // moving right
+            this.hue = Math.random() * 360;
+        }
+
+        update() {
+            this.x += this.speedX;
+            if (this.x > canvas.width) {
+                this.reset();
+            }
+        }
+
+        draw() {
+            const progress = this.x / canvas.width;
+            ctx.fillStyle = `hsl(${this.hue}, ${progress * 100}%, 50%)`;
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+        }
+    }
+
+    for (let i = 0; i < 200; i++) {
+        particles.push(new Particle());
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        particles.forEach(particle => {
+            particle.update();
+            particle.draw();
+        });
+        
+        requestAnimationFrame(animate);
+    }
+
+    animate();
 });
