@@ -200,7 +200,3 @@ If you make structural changes, keep runtime docs aligned with the actual execut
 - `backend/app.py`
 - `frontend/index.html`
 - `frontend/js/app.js`
-
-## License
-
-MIT License.

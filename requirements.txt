@@ -29,3 +29,4 @@ torch-fidelity
 
 # Optional but recommended
 wandb  # For experiment tracking
+ipython
