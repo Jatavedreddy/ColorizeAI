@@ -166,6 +166,8 @@ def colorize_highres_enhanced(
     # Handle argument aliases for compatibility with new UI calls
     if 'reference_image' in kwargs and reference_img is None:
         reference_img = kwargs['reference_image']
+    if 'color_points' in kwargs and color_hints is None:
+        color_hints = kwargs['color_points']
     if 'style' in kwargs:
         style = kwargs['style']
         if style is not None and style != 'none':

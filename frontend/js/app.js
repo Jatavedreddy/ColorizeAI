@@ -45,6 +45,253 @@ function getImgSrc(dataUrlOrB64) {
     return `data:image/jpeg;base64,${dataUrlOrB64}`;
 }
 
+const singleHintsState = {
+    points: [],
+    naturalWidth: 0,
+    naturalHeight: 0,
+    objectUrl: null
+};
+
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgb(hex) {
+    const normalized = (hex || '').replace('#', '');
+    if (normalized.length !== 6) return [255, 77, 77];
+    return [
+        parseInt(normalized.slice(0, 2), 16),
+        parseInt(normalized.slice(2, 4), 16),
+        parseInt(normalized.slice(4, 6), 16)
+    ];
+}
+
+function updateSingleHintJsonPreview() {
+    const jsonInput = document.getElementById('singleColorHintsJson');
+    if (!jsonInput) return;
+    jsonInput.value = singleHintsState.points.length > 0
+        ? JSON.stringify(singleHintsState.points)
+        : '';
+}
+
+function renderSingleHintsList() {
+    const list = document.getElementById('singleHintsList');
+    if (!list) return;
+
+    if (singleHintsState.points.length === 0) {
+        list.innerHTML = '<div class="form-text">No hints yet.</div>';
+        return;
+    }
+
+    list.innerHTML = singleHintsState.points.map((hint, idx) => {
+        const [x, y, r, g, b] = hint;
+        return `
+            <div class="single-hint-item">
+                <div class="single-hint-item-left">
+                    <span class="single-hint-swatch" style="background: rgb(${r}, ${g}, ${b});"></span>
+                    <span class="single-hint-text">#${idx + 1}: (${x}, ${y}) rgb(${r}, ${g}, ${b})</span>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" data-hint-remove-index="${idx}">x</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function drawSingleHintPoints() {
+    const canvas = document.getElementById('singleHintCanvas');
+    if (!canvas || canvas.style.display === 'none') return;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!singleHintsState.naturalWidth || !singleHintsState.naturalHeight) return;
+
+    singleHintsState.points.forEach((hint, idx) => {
+        const [x, y, r, g, b] = hint;
+        const cx = (x / singleHintsState.naturalWidth) * canvas.width;
+        const cy = (y / singleHintsState.naturalHeight) * canvas.height;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        ctx.fillStyle = '#111';
+        ctx.font = '11px Segoe UI';
+        ctx.fillText(String(idx + 1), cx + 8, cy - 8);
+    });
+}
+
+function syncSingleHintCanvasSize() {
+    const preview = document.getElementById('singleHintPreview');
+    const canvas = document.getElementById('singleHintCanvas');
+    if (!preview || !canvas || preview.style.display === 'none') return;
+
+    const rect = preview.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+
+    if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+    }
+
+    drawSingleHintPoints();
+}
+
+function setSingleHintImageFromFile(file) {
+    const preview = document.getElementById('singleHintPreview');
+    const canvas = document.getElementById('singleHintCanvas');
+    const overlay = document.getElementById('singleHintOverlayText');
+
+    if (!preview || !canvas || !overlay) return;
+
+    if (singleHintsState.objectUrl) {
+        URL.revokeObjectURL(singleHintsState.objectUrl);
+        singleHintsState.objectUrl = null;
+    }
+
+    singleHintsState.points = [];
+    singleHintsState.naturalWidth = 0;
+    singleHintsState.naturalHeight = 0;
+    updateSingleHintJsonPreview();
+    renderSingleHintsList();
+
+    if (!file) {
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        canvas.style.display = 'none';
+        overlay.style.display = 'flex';
+        return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    singleHintsState.objectUrl = objectUrl;
+    preview.onload = () => {
+        singleHintsState.naturalWidth = preview.naturalWidth;
+        singleHintsState.naturalHeight = preview.naturalHeight;
+        preview.style.display = 'block';
+        canvas.style.display = 'block';
+        overlay.style.display = 'none';
+        requestAnimationFrame(syncSingleHintCanvasSize);
+    };
+    preview.src = objectUrl;
+}
+
+function setupSingleHintEditor() {
+    const fileInput = document.getElementById('singleInputImg');
+    const colorInput = document.getElementById('singleHintColor');
+    const colorPreview = document.getElementById('singleHintColorPreview');
+    const canvas = document.getElementById('singleHintCanvas');
+    const list = document.getElementById('singleHintsList');
+    const undoBtn = document.getElementById('singleUndoHintBtn');
+    const clearBtn = document.getElementById('singleClearHintsBtn');
+
+    if (!fileInput || !colorInput || !canvas || !list || !undoBtn || !clearBtn) return;
+
+    colorPreview.style.background = colorInput.value;
+    renderSingleHintsList();
+
+    colorInput.addEventListener('input', () => {
+        colorPreview.style.background = colorInput.value;
+    });
+
+    fileInput.addEventListener('change', () => {
+        setSingleHintImageFromFile(fileInput.files[0]);
+    });
+
+    canvas.addEventListener('click', (event) => {
+        if (!singleHintsState.naturalWidth || !singleHintsState.naturalHeight) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const xDisplay = event.clientX - rect.left;
+        const yDisplay = event.clientY - rect.top;
+
+        const x = Math.round((xDisplay / rect.width) * singleHintsState.naturalWidth);
+        const y = Math.round((yDisplay / rect.height) * singleHintsState.naturalHeight);
+        const [r, g, b] = hexToRgb(colorInput.value);
+
+        singleHintsState.points.push([
+            clamp(x, 0, singleHintsState.naturalWidth - 1),
+            clamp(y, 0, singleHintsState.naturalHeight - 1),
+            r,
+            g,
+            b
+        ]);
+
+        updateSingleHintJsonPreview();
+        renderSingleHintsList();
+        drawSingleHintPoints();
+    });
+
+    list.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const removeIndexAttr = target.getAttribute('data-hint-remove-index');
+        if (removeIndexAttr === null) return;
+
+        const removeIndex = Number(removeIndexAttr);
+        if (Number.isNaN(removeIndex)) return;
+
+        singleHintsState.points.splice(removeIndex, 1);
+        updateSingleHintJsonPreview();
+        renderSingleHintsList();
+        drawSingleHintPoints();
+    });
+
+    undoBtn.addEventListener('click', () => {
+        if (singleHintsState.points.length === 0) return;
+        singleHintsState.points.pop();
+        updateSingleHintJsonPreview();
+        renderSingleHintsList();
+        drawSingleHintPoints();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        singleHintsState.points = [];
+        updateSingleHintJsonPreview();
+        renderSingleHintsList();
+        drawSingleHintPoints();
+    });
+
+    window.addEventListener('resize', syncSingleHintCanvasSize);
+}
+
+setupSingleHintEditor();
+
+function readSingleColorHints() {
+    const input = document.getElementById('singleColorHintsJson');
+    const raw = input ? input.value.trim() : '';
+    if (!raw) return null;
+
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch (err) {
+        throw new Error('Invalid Color Hints JSON. Use format [[x, y, r, g, b], ...].');
+    }
+
+    if (!Array.isArray(parsed)) {
+        throw new Error('Color Hints JSON must be an array.');
+    }
+
+    return parsed.map((hint, idx) => {
+        if (!Array.isArray(hint) || hint.length !== 5) {
+            throw new Error(`Hint #${idx + 1} must be [x, y, r, g, b].`);
+        }
+
+        const values = hint.map(Number);
+        if (values.some((v) => Number.isNaN(v))) {
+            throw new Error(`Hint #${idx + 1} contains non-numeric values.`);
+        }
+
+        return values;
+    });
+}
+
 
 // -------------------------------------------------------------
 // TAB 1: SINGLE IMAGE COLORIZE
@@ -58,6 +305,7 @@ document.getElementById('singleForm').addEventListener('submit', async (e) => {
     const strength = document.getElementById('singleStrength').value;
     const useDDColor = document.getElementById('singleUseDDColor').checked;
     const useEnsemble = document.getElementById('singleUseEnsemble').checked;
+    const colorHints = readSingleColorHints();
 
     if (!fileInput) return;
 
@@ -77,6 +325,9 @@ document.getElementById('singleForm').addEventListener('submit', async (e) => {
         formData.append('use_ddcolor', useDDColor);
         formData.append('use_ensemble', useEnsemble);
         formData.append('style_type', style);
+        if (colorHints && colorHints.length > 0) {
+            formData.append('color_hints_json', JSON.stringify(colorHints));
+        }
         
         const res = await fetch(`${API_URL}/colorize/enhanced`, {
             method: 'POST',

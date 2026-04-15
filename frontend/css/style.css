@@ -130,6 +130,94 @@ body {
     font-weight: 500;
 }
 
+.single-hint-editor {
+    position: relative;
+    width: 100%;
+    min-height: 180px;
+    border: 1px dashed #cfd6de;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+}
+
+#singleHintPreview {
+    display: none;
+    width: 100%;
+    height: auto;
+}
+
+#singleHintCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+    display: none;
+}
+
+.single-hint-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-align: center;
+    background: linear-gradient(135deg, #f8fafc 0%, #eef3f8 100%);
+}
+
+.single-hint-current-color {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: #ff4d4d;
+}
+
+.single-hints-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 140px;
+    overflow-y: auto;
+}
+
+.single-hint-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    background: #fff;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+}
+
+.single-hint-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.single-hint-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+
+.single-hint-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Logo Fixes */
 .navbar-logo {
     font-family: inherit;

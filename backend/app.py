@@ -118,7 +118,7 @@ def colorize_enhanced():
             use_ensemble=use_ensemble,
             reference_image=reference_img,
             style_type=style_type,
-            color_points=pts
+            color_hints=pts
         )
         
         return jsonify({

@@ -67,6 +67,23 @@
                                     <input class="form-control" type="file" id="singleInputImg" accept="image/*" required>
                                 </div>
                                 <div class="mb-3 border p-3 rounded bg-light">
+                                    <h6 class="fw-bold mb-3 text-muted">Interactive Color Hints</h6>
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <label class="form-label fw-bold fs-7 m-0" for="singleHintColor">Hint Color</label>
+                                        <input class="form-control form-control-color" type="color" id="singleHintColor" value="#ff4d4d" title="Pick hint color">
+                                        <span id="singleHintColorPreview" class="single-hint-current-color"></span>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="singleUndoHintBtn">Undo</button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" id="singleClearHintsBtn">Clear</button>
+                                    </div>
+                                    <div id="singleHintEditor" class="single-hint-editor">
+                                        <img id="singleHintPreview" alt="Hint placement preview">
+                                        <canvas id="singleHintCanvas"></canvas>
+                                        <div id="singleHintOverlayText" class="single-hint-overlay">Choose an image to place hints</div>
+                                    </div>
+                                    <div class="form-text mt-2">Click on preview to add points. Hints are sent as [x, y, r, g, b].</div>
+                                    <div id="singleHintsList" class="single-hints-list mt-2"></div>
+                                </div>
+                                <div class="mb-3 border p-3 rounded bg-light">
                                     <h6 class="fw-bold mb-3 text-muted">Advanced Options</h6>
                                     <div class="mb-2">
                                         <label class="form-label fw-bold fs-7">Reference Image (Optional)</label>
@@ -80,6 +97,17 @@
                                             <option value="vibrant">Vibrant / Cinematic</option>
                                             <option value="natural">Natural</option>
                                         </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label fw-bold fs-7">Color Hints JSON (Optional)</label>
+                                        <textarea
+                                            class="form-control form-control-sm"
+                                            id="singleColorHintsJson"
+                                            rows="3"
+                                            placeholder="[[120, 80, 255, 0, 0], [220, 150, 0, 120, 255]]"
+                                            readonly
+                                        ></textarea>
+                                        <div class="form-text">Live preview from clicks (read-only).</div>
                                     </div>
                                     <div class="form-check form-switch mb-1">
                                         <input class="form-check-input" type="checkbox" id="singleUseEnsemble" checked>
